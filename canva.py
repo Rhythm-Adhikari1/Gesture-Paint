@@ -39,7 +39,7 @@ def is_index_up(hand):
 def is_thumb_and_index_up(hand):
     """ Returns True if both the thumb and index finger are up. """
     fingers_up = detector.fingersUp(hand)
-    return fingers_up[0] == 1 and fingers_up[1] == 1 and all(f == 0 for f in fingers_up[2:])
+    return   all(f == 1 for f in fingers_up[:])
 
 def square(index_x, index_y, hand):
     global square_selected, selected_square_index, square_button_clicked, dragging, brush_button_clicked
