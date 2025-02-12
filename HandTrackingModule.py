@@ -1,6 +1,7 @@
 import cv2
 import mediapipe as mp
 import time
+import math
 
 class HandDetector:
     """
@@ -148,6 +149,7 @@ class HandDetector:
 
         return length, info, img
 
+    
 
 def main():
     # Initialize the webcam to capture video
