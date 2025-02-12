@@ -96,36 +96,34 @@ class HandDetector:
 
     def fingersUp(self, myHand):
         """
-        Determines which fingers are up.
-        Uses the landmark positions to check if each finger is extended.
-
-        :param myHand: Dictionary containing "lmList" (landmark list) and "type" (hand type)
-        :return: List of 5 elements (1 if the finger is up, 0 if down)
+        Finds how many fingers are open and returns in a list.
+        Considers left and right hands separately
+        :return: List of which fingers are up
         """
-        fingers = [0] * 5  # Initialize list for 5 fingers (default: all down)
-        myLmList = myHand["lmList"]  # List of hand landmarks
-        handType = myHand["type"]  # "Left" or "Right"
+        fingers = []
+        myHandType = myHand["type"]
+        myLmList = myHand["lmList"]
+        if self.results.multi_hand_landmarks:
 
-        if not myLmList:
-            return fingers  # Return all fingers as down if no hand landmarks detected
+            # Thumb
+            if myHandType == "Right":
+                if myLmList[self.tipIds[0]][0] > myLmList[self.tipIds[0] - 1][0]:
+                    fingers.append(1)
+                else:
+                    fingers.append(0)
+            else:
+                if myLmList[self.tipIds[0]][0] < myLmList[self.tipIds[0] - 1][0]:
+                    fingers.append(1)
+                else:
+                    fingers.append(0)
 
-        # **Thumb Detection (Different Logic for Left and Right Hands)**
-        thumb_tip = myLmList[self.tipIds[0]]  # Thumb tip
-        thumb_mcp = myLmList[self.tipIds[0] - 2]  # Thumb MCP (base joint)
-
-        if handType == "Right":
-            fingers[0] = 1 if thumb_tip[0] > thumb_mcp[0] else 0  # Right hand: Thumb is open if tip is RIGHT of MCP
-        else:
-            fingers[0] = 1 if thumb_tip[0] < thumb_mcp[0] else 0  # Left hand: Thumb is open if tip is LEFT of MCP
-
-        # **Other 4 Fingers (Index, Middle, Ring, Pinky)**
-        for i in range(1, 5):
-            tip = myLmList[self.tipIds[i]]  # Finger tip
-            pip = myLmList[self.tipIds[i] - 2]  # PIP joint (middle joint of finger)
-
-            fingers[i] = 1 if tip[1] < pip[1] else 0  # Finger is up if tip is ABOVE PIP joint
-
-        return fingers  # Returns list of [thumb, index, middle, ring, pinky]
+            # 4 Fingers
+            for id in range(1, 5):
+                if myLmList[self.tipIds[id]][1] < myLmList[self.tipIds[id] - 2][1]:
+                    fingers.append(1)
+                else:
+                    fingers.append(0)
+        return fingers
 
     def findDistance(self, p1, p2, img=None, color=(255, 0, 255), scale=5):
         """
