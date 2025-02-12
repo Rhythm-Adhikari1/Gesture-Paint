@@ -13,10 +13,16 @@ detector = HandDetector(detectionCon= 0.8)
 
 while True:
     success, img = cap.read()
-    hands, img = detector.findHands(img)
+    # hands, img = detector.findHands(img)
 
     
     img = cv2.flip(img, 1)
+    hands, img = detector.findHands(img, img_to_draw=img)    
 
     cv2.imshow("Image", img)
-    cv2.waitKey(1)
+    
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
