@@ -35,10 +35,11 @@ clip_rect = [(50, 200), (w - 250, 200), (w - 250, h - 50), (50, h - 50)]
 # Define button areas
 buttons = {
     "brush": [(0, 0), (200, 200)],
-    "square": [(w - 200, 0), (w, 200)],
-    "rectangle": [(w - 400, 0), (w - 200, 200)],
-    "circle": [(w - 600, 0), (w - 400, 200)],
-    "triangle": [(w - 800, 0), (w - 600, 200)],
+    "square": [(w - 150, 0), (w, 144)],
+    "rectangle": [(w - 150, 144), (w , 288)],
+    "line": [(w - 150, 288), (w, 432)],
+    "triangle": [(w - 150, 432), (w , 576)],
+    "circle" : [(w - 150, 576), (w, 720)]
 }
 
 def is_index_up(hand):

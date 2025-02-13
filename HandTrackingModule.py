@@ -168,7 +168,7 @@ def main():
         # Find hands in the current frame
         # The 'draw' parameter draws landmarks and hand outlines on the image if set to True
         # The 'flipType' parameter flips the image, making it easier for some detections
-        hands, img = detector.findHands(img, draw=True, flipType=True)
+        hands, img = detector.findHands(img,img_to_draw= img, draw=True, flipType=True)
 
         # Check if any hands are detected
         if hands:
