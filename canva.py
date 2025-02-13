@@ -4,6 +4,7 @@ from HandTrackingModule import HandDetector
 from shapes import Draw
 from clipping import clip_polygon
 
+
 # Initialize Camera
 cap = cv2.VideoCapture(0)
 w, h = 1280, 720
@@ -11,7 +12,7 @@ cap.set(3, w)
 cap.set(4, h)
 
 # Load Background Image
-image_path = "image/image.png"  # Ensure the path is correct
+image_path = "image/photo.png"  # Ensure the path is correct
 background_img = cv2.imread(image_path)
 
 # Initialize Hand Detector
@@ -25,6 +26,10 @@ selected_square_index = None      # Index of the currently selected polygon for 
 square_size = 50                  # Default size of square
 dropped_shapes = []               # List to store dropped square (polygon) coordinates
 square_button_clicked = False     # Whether the square button is active
+rectangle_button_clicked = False  # Whether the rectangle button is active
+triangle_button_clicked = False   # Whether the triangle button is active
+line_button_clicked = False       # Whether the line button is active
+circle_button_clicked = False     # Whether the circle button is active
 dragging = False                  # (Not used in new dragging logic)
 brush_button_clicked = False
 prev_x, prev_y = None, None       # Previous coordinates for brush drawing
@@ -127,7 +132,104 @@ def square(index_x, index_y, hand):
         dropped_shapes.append(updated_coordinates)  # Add new square to the list
         square_button_clicked = False  # Reset button
         print("📍 Square Dropped")
+        
+def rectangle(index_x, index_y, hand):
+    global rectangle_button_clicked, brush_button_clicked
 
+    # rectangle Button Coordinates
+    x1s, y1s, x2s, y2s = *buttons["rectangle"][0], *buttons["rectangle"][1]
+
+    # **Click rectangle Button (Only Index Finger Up)**
+    if x1s < index_x < x2s and y1s < index_y < y2s:
+        if is_index_up(hand):
+            rectangle_button_clicked = True
+            brush_button_clicked = False
+            print("🟦 rectangle Button Clicked")
+
+    # **Drop a New rectangle (When rectangle Button is Active)**
+    if rectangle_button_clicked and is_index_up(hand) and not (x1s < index_x < x2s and y1s < index_y < y2s):
+        updated_coordinates = [(x + index_x, y + index_y) for x, y in initial_square_coordinates]
+        dropped_shapes.append(updated_coordinates)  # Add new rectangle to the list
+        rectangle_button_clicked = False  # Reset button
+        print("📍 rectangle Dropped")
+
+
+def triangle(index_x, index_y, hand):
+    global triangle_button_clicked, brush_button_clicked
+
+    # Triangle Button Coordinates
+    x1t, y1t, x2t, y2t = *buttons["triangle"][0], *buttons["triangle"][1]
+
+    # **Click Triangle Button (Only Index Finger Up)**
+    if x1t < index_x < x2t and y1t < index_y < y2t:
+        if is_index_up(hand):
+            triangle_button_clicked = True
+            brush_button_clicked = False
+            print("🔺 Triangle Button Clicked")
+
+    # **Drop a New Triangle (When Triangle Button is Active)**
+    if triangle_button_clicked and is_index_up(hand) and not (x1t < index_x < x2t and y1t < index_y < y2t):
+        triangle_size = 50  # Adjust size as needed
+        updated_triangle_coordinates = [
+            (index_x, index_y - triangle_size),  # Top vertex
+            (index_x - triangle_size, index_y + triangle_size),  # Bottom left vertex
+            (index_x + triangle_size, index_y + triangle_size)   # Bottom right vertex
+        ]
+        dropped_shapes.append(updated_triangle_coordinates)  # Add new triangle to the list
+        triangle_button_clicked = False  # Reset button
+        print("📍 Triangle Dropped")
+        
+
+
+
+def draw_line(index_x, index_y, hand):
+    global line_button_clicked, brush_button_clicked
+
+    # Line Button Coordinates
+    x1l, y1l, x2l, y2l = *buttons["line"][0], *buttons["line"][1]
+
+    # **Click Line Button (Only Index Finger Up)**
+    if x1l < index_x < x2l and y1l < index_y < y2l:
+        if is_index_up(hand):
+            line_button_clicked = True
+            brush_button_clicked = False
+            print("📏 Line Button Clicked")
+
+    # **Drop a New Line (When Line Button is Active)**
+    if line_button_clicked and is_index_up(hand) and not (x1l < index_x < x2l and y1l < index_y < y2l):
+        line_length = 80  # Adjust as needed
+        updated_line_coordinates = [
+            (index_x - line_length // 2, index_y),  # Start point (Left)
+            (index_x + line_length // 2, index_y)   # End point (Right)
+        ]
+        dropped_shapes.append(updated_line_coordinates)  # Add new line to the list
+        line_button_clicked = False  # Reset button
+        print("📍 Line Dropped")
+        
+        
+def draw_circle(index_x, index_y, hand):
+    global circle_button_clicked, brush_button_clicked
+
+    # Circle Button Coordinates
+    x1c, y1c, x2c, y2c = *buttons["circle"][0], *buttons["circle"][1]
+
+    # **Click Circle Button (Only Index Finger Up)**
+    if x1c < index_x < x2c and y1c < index_y < y2c:
+        if is_index_up(hand):
+            circle_button_clicked = True
+            brush_button_clicked = False
+            print("⭕ Circle Button Clicked")
+
+    # **Drop a New Circle (When Circle Button is Active)**
+    if circle_button_clicked and is_index_up(hand) and not (x1c < index_x < x2c and y1c < index_y < y2c):
+        circle_radius = 40  # Adjust radius as needed
+        updated_circle_coordinates = (index_x, index_y, circle_radius)  # (CenterX, CenterY, Radius)
+        dropped_shapes.append(updated_circle_coordinates)  # Add new circle to the list
+        circle_button_clicked = False  # Reset button
+        print("📍 Circle Dropped")
+        
+
+        
 def brush(index_x, index_y, hand):
     global brush_button_clicked, prev_x, prev_y, canvas
 
@@ -231,10 +333,16 @@ while cap.isOpened():
             # Process button actions (create square, brush, etc.)
             square(index_x, index_y, hand)
             brush(index_x, index_y, hand)
+
             red(index_x, index_y, hand)
             blue(index_x, index_y, hand)
             green(index_x, index_y, hand)
             yellow(index_x, index_y, hand)
+            
+            rectangle(index_x, index_y, hand)
+            triangle(index_x, index_y, hand)
+            draw_line(index_x, index_y, hand)
+            draw_circle(index_x, index_y, hand)
 
             # -----------------------------
             # DRAGGING LOGIC (Selection & Movement)
