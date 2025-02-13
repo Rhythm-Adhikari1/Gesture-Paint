@@ -35,7 +35,7 @@ brush_button_clicked = False
 prev_x, prev_y = None, None       # Previous coordinates for brush drawing
 initial_square_coordinates = [(-50, -50), (50, -50), (50, 50), (-50, 50)]
 prev_index_x, prev_index_y = None, None  # Previous index finger coordinates for dragging
-clip_rect = [(50, 200), (w - 250, 200), (w - 250, h - 50), (50, h - 50)]
+drawing_canvas = [(30, 150), (1030, 150), (1030, h - 50), (30, h - 50)]
 red_color_clicked = False
 blue_color_clicked = False
 green_color_clicked = False
@@ -45,16 +45,19 @@ yellow_color_clicked = False
 
 # Define button areas
 buttons = {
-    "brush": [(0, 0), (200, 200)],
-    "square": [(w - 150, 0), (w, 144)],
-    "rectangle": [(w - 150, 144), (w , 288)],
-    "line": [(w - 150, 288), (w, 432)],
-    "triangle": [(w - 150, 432), (w , 576)],
-    "circle" : [(w - 150, 576), (w, 720)],
-    "red": [(402, -40), (530, 140)],
-    "blue": [(556, -40), (672, 140)],
-    "green": [(710, -40), (814, 140)],
-    "yellow": [(866, -40), (956, 140)],
+    "brush": [(20, 20), (100, 100)],
+    "eraser": [(120, 20), (200, 100)],
+    "square": [(620,20), (685, 95)],
+    "rectangle": [(700, 20), (775 , 95)],
+    "line": [(785, 20), (855, 95)],
+    "triangle": [(870, 20), (945 , 95)],
+    "circle" : [(955, 20), (1030, 95)],
+    "red": [(230, 20), (310, 100)],
+    "blue": [(325, 20), (495, 100)],
+    "green": [(380, 20), (485, 100)],
+    "yellow": [(495, 20), (575, 100)],
+    "undo" : [(865, 20), (950, 100)],
+    "redo" : [(1070, 20), (1150, 100)],
 }
 
 RED_COLOR_CODE = (0, 0, 255)       # Red in BGR
@@ -63,6 +66,7 @@ GREEN_COLOR_CODE = (0, 255, 0)     # Green in BGR
 YELLOW_COLOR_CODE = (0, 255, 255)  # Yellow in BGR
 
 
+# disable other colors when selecting a color
 def select_color(color):
     global red_color_clicked, blue_color_clicked, green_color_clicked, yellow_color_clicked
     if(color == "red"):
@@ -82,6 +86,20 @@ def select_color(color):
         blue_color_clicked = False
         yellow_color_clicked = False
 
+# determine which color is selected at present
+def get_color():
+    global red_color_clicked, blue_color_clicked, green_color_clicked, yellow_color_clicked
+    if(red_color_clicked):
+        return RED_COLOR_CODE
+    elif(blue_color_clicked):
+        return BLUE_COLOR_CODE
+    elif(green_color_clicked):
+        return GREEN_COLOR_CODE
+    elif(yellow_color_clicked):
+        return YELLOW_COLOR_CODE
+    else:
+        return RED_COLOR_CODE
+
 
 def is_index_up(hand):
     """Returns True if only the index finger is up."""
@@ -98,19 +116,7 @@ def polygon(index_x, index_y, hand):
     pass
 
 
-# determine which color is selected at present
-def get_color():
-    global red_color_clicked, blue_color_clicked, green_color_clicked, yellow_color_clicked
-    if(red_color_clicked):
-        return RED_COLOR_CODE
-    elif(blue_color_clicked):
-        return BLUE_COLOR_CODE
-    elif(green_color_clicked):
-        return GREEN_COLOR_CODE
-    elif(yellow_color_clicked):
-        return YELLOW_COLOR_CODE
-    else:
-        return RED_COLOR_CODE
+
     
 
 def square(index_x, index_y, hand):
@@ -344,6 +350,9 @@ while cap.isOpened():
             draw_line(index_x, index_y, hand)
             draw_circle(index_x, index_y, hand)
 
+            #print cooridinates
+            # print(index_x, index_y)
+
             # -----------------------------
             # DRAGGING LOGIC (Selection & Movement)
             # -----------------------------
@@ -381,7 +390,7 @@ while cap.isOpened():
     # Draw all polygons (after clipping)
     for shape in dropped_shapes:
         if shape:
-            clipped_shape = clip_polygon(shape, clip_rect)
+            clipped_shape = clip_polygon(shape, drawing_canvas)
             if clipped_shape:
                 draw_shapes.polygon(combined, points=clipped_shape, color=(0, 255, 0))
 
