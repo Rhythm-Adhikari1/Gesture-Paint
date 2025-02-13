@@ -12,7 +12,7 @@ cap.set(3, w)
 cap.set(4, h)
 
 # Load Background Image
-image_path = "image/photo.png"  # Ensure the path is correct
+image_path = "image/image.png"  # Ensure the path is correct
 background_img = cv2.imread(image_path)
 
 # Initialize Hand Detector
