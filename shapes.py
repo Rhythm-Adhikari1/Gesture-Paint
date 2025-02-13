@@ -8,8 +8,9 @@ class Draw:
 
     def line(self, img, point1, point2, color):
         
-        x1, y1 = point1
-        x2, y2 = point2
+        x1, y1 = map(int, point1)  # Ensure integer values
+        x2, y2 = map(int, point2)
+
         dx = abs(x2 - x1)
         dy = abs(y2 - y1)
         sx = 1 if x2 > x1 else -1  
@@ -33,7 +34,7 @@ class Draw:
     def polygon(self, img, points, color):
         n = len(points)
         for i in range(n):
-            if i == (n-1):
+            if i < (n-1):
                 self.line(img, points[i], points[i+1],color=color)
             else:
                 self.line(img, points[i], points[0], color=color)

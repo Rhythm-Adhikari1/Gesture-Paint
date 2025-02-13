@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 from HandTrackingModule import HandDetector
+from shapes import Draw
+from clipping import clip_polygon
 
 # Initialize Camera
 cap = cv2.VideoCapture(0)
@@ -14,35 +16,47 @@ background_img = cv2.imread(image_path)
 
 # Initialize Hand Detector
 detector = HandDetector(detectionCon=0.8)
+draw_shapes = Draw()
 
 # Persistent Drawing Canvas
 canvas = None
-square_selected = False  # Flag for selecting a square
-selected_square_index = None  # Stores index of the selected square
-square_size = 50  # Default size of square
-dropped_squares = []  # Stores dropped square positions
-square_button_clicked = False  # Whether the square button is active
-dragging = False  # Whether a square is being dragged
+square_selected = False           # (Not used in new dragging logic)
+selected_square_index = None      # Index of the currently selected polygon for dragging
+square_size = 50                  # Default size of square
+dropped_shapes = []               # List to store dropped square (polygon) coordinates
+square_button_clicked = False     # Whether the square button is active
+dragging = False                  # (Not used in new dragging logic)
 brush_button_clicked = False
-prev_x, prev_y = None, None  # Previous coordinates for brush drawing
+prev_x, prev_y = None, None       # Previous coordinates for brush drawing
+initial_square_coordinates = [(-50, -50), (50, -50), (50, 50), (-50, 50)]
+prev_index_x, prev_index_y = None, None  # Previous index finger coordinates for dragging
+clip_rect = [(50, 200), (w - 250, 200), (w - 250, h - 50), (50, h - 50)]
 
+# Define button areas
 buttons = {
     "brush": [(0, 0), (200, 200)],
-    "square": [(w - 200, 0), (w, 200)]
+    "square": [(w - 200, 0), (w, 200)],
+    "rectangle": [(w - 400, 0), (w - 200, 200)],
+    "circle": [(w - 600, 0), (w - 400, 200)],
+    "triangle": [(w - 800, 0), (w - 600, 200)],
 }
 
 def is_index_up(hand):
-    """ Returns True if only the index finger is up. """
+    """Returns True if only the index finger is up."""
     fingers_up = detector.fingersUp(hand)
     return fingers_up[0] == 0 and fingers_up[1] == 1 and all(f == 0 for f in fingers_up[2:])
 
-def is_thumb_and_index_up(hand):
-    """ Returns True if both the thumb and index finger are up. """
+def is_all_finger_up(hand):
+    """Returns True if all fingers are up."""
     fingers_up = detector.fingersUp(hand)
-    return   all(f == 1 for f in fingers_up[:])
+    return all(f == 1 for f in fingers_up)
+
+def polygon(index_x, index_y, hand):
+    # Placeholder for polygon creation (if needed)
+    pass
 
 def square(index_x, index_y, hand):
-    global square_selected, selected_square_index, square_button_clicked, dragging, brush_button_clicked
+    global square_button_clicked, brush_button_clicked
 
     # Square Button Coordinates
     x1s, y1s, x2s, y2s = *buttons["square"][0], *buttons["square"][1]
@@ -56,32 +70,10 @@ def square(index_x, index_y, hand):
 
     # **Drop a New Square (When Square Button is Active)**
     if square_button_clicked and is_index_up(hand) and not (x1s < index_x < x2s and y1s < index_y < y2s):
-        new_x, new_y = index_x - square_size // 2, index_y - square_size // 2
-        dropped_squares.append((new_x, new_y))  # Drop square
+        updated_coordinates = [(x + index_x, y + index_y) for x, y in initial_square_coordinates]
+        dropped_shapes.append(updated_coordinates)  # Add new square to the list
         square_button_clicked = False  # Reset button
-        print(f"📍 Square Dropped at ({new_x}, {new_y})")
-        return
-
-    # **Select & Drag an Existing Square**
-    if not dragging:
-        for i, (sx, sy) in enumerate(dropped_squares):
-            if sx <= index_x <= sx + square_size and sy <= index_y <= sy + square_size:
-                if is_index_up(hand):
-                    square_selected = True
-                    selected_square_index = i
-                    dragging = True  # Start dragging
-                    print("🔄 Square Selected for Dragging")
-
-    # **Move the Selected Square**
-    if dragging and square_selected:
-        new_x, new_y = index_x - square_size // 2, index_y - square_size // 2
-        dropped_squares[selected_square_index] = (new_x, new_y)
-
-        # **Release the Square When Both Thumb and Index Are Up**
-        if is_thumb_and_index_up(hand):
-            square_selected = False
-            dragging = False
-            print(f"✅ Square Dropped at ({new_x}, {new_y})")
+        print("📍 Square Dropped")
 
 def brush(index_x, index_y, hand):
     global brush_button_clicked, prev_x, prev_y, canvas
@@ -98,13 +90,10 @@ def brush(index_x, index_y, hand):
     elif brush_button_clicked and is_index_up(hand):
         if prev_x is None or prev_y is None:
             prev_x, prev_y = index_x, index_y  # Initialize previous position
-
         cv2.line(canvas, (prev_x, prev_y), (index_x, index_y), (0, 0, 255), 5)  # Draw red line
         prev_x, prev_y = index_x, index_y  # Update previous position
-
     else:
-        prev_x, prev_y = None, None  # Reset drawing state when fingers are not in the right position
-
+        prev_x, prev_y = None, None  # Reset when not drawing
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -131,15 +120,51 @@ while cap.isOpened():
         for hand in hands:
             lm_list = hand["lmList"]
             index_x, index_y = lm_list[8][:2]  # Index finger tip
+
+            # Process button actions (create square, brush, etc.)
             square(index_x, index_y, hand)
             brush(index_x, index_y, hand)
+
+            # -----------------------------
+            # DRAGGING LOGIC (Selection & Movement)
+            # -----------------------------
+            # When the index finger is up, we either select a polygon or move the selected one.
+            if is_index_up(hand):
+                # If a polygon is already selected, move it
+                if selected_square_index is not None:
+                    if prev_index_x is None or prev_index_y is None:
+                        prev_index_x, prev_index_y = index_x, index_y
+                    dx = index_x - prev_index_x
+                    dy = index_y - prev_index_y
+                    # Update the selected polygon's coordinates
+                    dropped_shapes[selected_square_index] = [
+                        (x + dx, y + dy) for (x, y) in dropped_shapes[selected_square_index]
+                    ]
+                    prev_index_x, prev_index_y = index_x, index_y
+                else:
+                    # No polygon selected yet: try to select one
+                    # Check in reverse order (assume last drawn is on top)
+                    for i in range(len(dropped_shapes) - 1, -1, -1):
+                        coordinates_numpy = np.array(dropped_shapes[i], np.int32)
+                        if cv2.pointPolygonTest(coordinates_numpy, (index_x, index_y), False) >= 0:
+                            selected_square_index = i
+                            prev_index_x, prev_index_y = index_x, index_y
+                            print(f"🔄 Polygon {i} selected for dragging")
+                            break
+            else:
+                # If index finger is not up, clear the selection
+                selected_square_index = None
+                prev_index_x, prev_index_y = None, None
 
     # Merge canvas with background to keep drawings persistent
     combined = cv2.addWeighted(background_resized, 0.8, canvas, 1, 0)
 
-    # Draw all dropped squares
-    for sx, sy in dropped_squares:
-        cv2.rectangle(combined, (sx, sy), (sx + square_size, sy + square_size), (0, 255, 255), -1)
+    # Draw all polygons (after clipping)
+    for shape in dropped_shapes:
+        if shape:
+            clipped_shape = clip_polygon(shape, clip_rect)
+            if clipped_shape:
+                draw_shapes.polygon(combined, points=clipped_shape, color=(0, 255, 0))
 
     # Show Output
     cv2.imshow("Virtual Canvas", combined)
