@@ -20,6 +20,7 @@ detector = HandDetector(detectionCon=0.8)
 draw_shapes = Draw()
 
 # Persistent Drawing Canvas
+canDraw = False
 canvas = None
 square_selected = False           # (Not used in new dragging logic)
 selected_square_index = None      # Index of the currently selected polygon for dragging
@@ -63,7 +64,14 @@ buttons = {
 RED_COLOR_CODE = (0, 0, 255)       # Red in BGR
 BLUE_COLOR_CODE = (255, 0, 0)      # Blue in BGR
 GREEN_COLOR_CODE = (0, 255, 0)     # Green in BGR
-YELLOW_COLOR_CODE = (0, 255, 255)  # Yellow in BGR
+YELLOW_COLOR_CODE = (0, 255, 255)  # Yellow in BGR]
+
+# a function to check if the hand is placed inside the drawing canvas to draw only inside the drawing canvass.
+
+def check_hand_inside_canvas(index_x, index_y):
+    if(index_x > 30 and index_x < 1030 and index_y > 150 and index_y < (h-50)):
+        return True
+    return False
 
 
 # disable other colors when selecting a color
@@ -114,10 +122,6 @@ def is_all_finger_up(hand):
 def polygon(index_x, index_y, hand):
     # Placeholder for polygon creation (if needed)
     pass
-
-
-
-    
 
 def square(index_x, index_y, hand):
     global square_button_clicked, brush_button_clicked
@@ -237,7 +241,11 @@ def draw_circle(index_x, index_y, hand):
 
         
 def brush(index_x, index_y, hand):
-    global brush_button_clicked, prev_x, prev_y, canvas
+    global brush_button_clicked, prev_x, prev_y, canvas, canDraw
+
+
+    canDraw = check_hand_inside_canvas(index_x, index_y)
+
 
     x1b, y1b, x2b, y2b = *buttons["brush"][0], *buttons["brush"][1]
 
@@ -248,7 +256,7 @@ def brush(index_x, index_y, hand):
             print("🖌 Brush Button Clicked")
 
     # **Draw if Brush is Selected & Only Index Finger is Up**
-    elif brush_button_clicked and is_index_up(hand):
+    elif brush_button_clicked and is_index_up(hand) and canDraw:
         if prev_x is None or prev_y is None:
             prev_x, prev_y = index_x, index_y  # Initialize previous position
         cv2.line(canvas, (prev_x, prev_y), (index_x, index_y), get_color(), 5)  # Draw red line
