@@ -31,6 +31,12 @@ prev_x, prev_y = None, None       # Previous coordinates for brush drawing
 initial_square_coordinates = [(-50, -50), (50, -50), (50, 50), (-50, 50)]
 prev_index_x, prev_index_y = None, None  # Previous index finger coordinates for dragging
 clip_rect = [(50, 200), (w - 250, 200), (w - 250, h - 50), (50, h - 50)]
+red_color_clicked = False
+blue_color_clicked = False
+green_color_clicked = False
+yellow_color_clicked = False
+
+
 
 # Define button areas
 buttons = {
@@ -39,8 +45,38 @@ buttons = {
     "rectangle": [(w - 150, 144), (w , 288)],
     "line": [(w - 150, 288), (w, 432)],
     "triangle": [(w - 150, 432), (w , 576)],
-    "circle" : [(w - 150, 576), (w, 720)]
+    "circle" : [(w - 150, 576), (w, 720)],
+    "red": [(402, -40), (530, 140)],
+    "blue": [(556, -40), (672, 140)],
+    "green": [(710, -40), (814, 140)],
+    "yellow": [(866, -40), (956, 140)],
 }
+
+RED_COLOR_CODE = (0, 0, 255)       # Red in BGR
+BLUE_COLOR_CODE = (255, 0, 0)      # Blue in BGR
+GREEN_COLOR_CODE = (0, 255, 0)     # Green in BGR
+YELLOW_COLOR_CODE = (0, 255, 255)  # Yellow in BGR
+
+
+def select_color(color):
+    global red_color_clicked, blue_color_clicked, green_color_clicked, yellow_color_clicked
+    if(color == "red"):
+        blue_color_clicked = False
+        green_color_clicked = False
+        yellow_color_clicked = False
+    elif(color == "blue"):
+        red_color_clicked = False
+        green_color_clicked = False
+        yellow_color_clicked = False
+    elif(color == "yellow"):
+        red_color_clicked = False
+        green_color_clicked = False
+        blue_color_clicked = False
+    elif(color == "green"):
+        red_color_clicked = False
+        blue_color_clicked = False
+        yellow_color_clicked = False
+
 
 def is_index_up(hand):
     """Returns True if only the index finger is up."""
@@ -55,6 +91,22 @@ def is_all_finger_up(hand):
 def polygon(index_x, index_y, hand):
     # Placeholder for polygon creation (if needed)
     pass
+
+
+# determine which color is selected at present
+def get_color():
+    global red_color_clicked, blue_color_clicked, green_color_clicked, yellow_color_clicked
+    if(red_color_clicked):
+        return RED_COLOR_CODE
+    elif(blue_color_clicked):
+        return BLUE_COLOR_CODE
+    elif(green_color_clicked):
+        return GREEN_COLOR_CODE
+    elif(yellow_color_clicked):
+        return YELLOW_COLOR_CODE
+    else:
+        return RED_COLOR_CODE
+    
 
 def square(index_x, index_y, hand):
     global square_button_clicked, brush_button_clicked
@@ -91,10 +143,64 @@ def brush(index_x, index_y, hand):
     elif brush_button_clicked and is_index_up(hand):
         if prev_x is None or prev_y is None:
             prev_x, prev_y = index_x, index_y  # Initialize previous position
-        cv2.line(canvas, (prev_x, prev_y), (index_x, index_y), (0, 0, 255), 5)  # Draw red line
+        cv2.line(canvas, (prev_x, prev_y), (index_x, index_y), get_color(), 5)  # Draw red line
         prev_x, prev_y = index_x, index_y  # Update previous position
     else:
         prev_x, prev_y = None, None  # Reset when not drawing
+
+def red(index_x, index_y, hand):
+    global red_color_clicked, brush_button_clicked
+
+    #red button coordinates
+    x1s, y1s, x2s, y2s = *buttons["red"][0], *buttons["red"][1]
+
+    # **Click Square Button (Only Index Finger Up)**
+    if x1s < index_x < x2s and y1s < index_y < y2s:
+        if is_index_up(hand):
+            red_color_clicked = True
+            select_color("red")
+            print("🟦 Red color Clicked")
+
+def blue(index_x, index_y, hand):
+    global blue_color_clicked, brush_button_clicked
+
+    #red button coordinates
+    x1s, y1s, x2s, y2s = *buttons["blue"][0], *buttons["blue"][1]
+
+    # **Click Square Button (Only Index Finger Up)**
+    if x1s < index_x < x2s and y1s < index_y < y2s:
+        if is_index_up(hand):
+            blue_color_clicked = True
+            select_color("blue")
+            print("🟦 Blue color Clicked")
+
+def green(index_x, index_y, hand):
+    global green_color_clicked, brush_button_clicked
+
+    #red button coordinates
+    x1s, y1s, x2s, y2s = *buttons["green"][0], *buttons["green"][1]
+
+    # **Click Square Button (Only Index Finger Up)**
+    if x1s < index_x < x2s and y1s < index_y < y2s:
+        if is_index_up(hand):
+            green_color_clicked = True
+            select_color("green")
+            print("🟦 Green color Clicked")
+
+def yellow(index_x, index_y, hand):
+    global yellow_color_clicked, brush_button_clicked
+
+    #red button coordinates
+    x1s, y1s, x2s, y2s = *buttons["yellow"][0], *buttons["yellow"][1]
+
+    # **Click Square Button (Only Index Finger Up)**
+    if x1s < index_x < x2s and y1s < index_y < y2s:
+        if is_index_up(hand):
+            yellow_color_clicked = True
+            select_color("yellow")
+            print("🟦 Yellow color Clicked")
+
+
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -125,6 +231,10 @@ while cap.isOpened():
             # Process button actions (create square, brush, etc.)
             square(index_x, index_y, hand)
             brush(index_x, index_y, hand)
+            red(index_x, index_y, hand)
+            blue(index_x, index_y, hand)
+            green(index_x, index_y, hand)
+            yellow(index_x, index_y, hand)
 
             # -----------------------------
             # DRAGGING LOGIC (Selection & Movement)
