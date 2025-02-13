@@ -96,35 +96,67 @@ class HandDetector:
 
     def fingersUp(self, myHand):
         """
-        Finds how many fingers are open and returns in a list.
-        Considers left and right hands separately
-        :return: List of which fingers are up
+        Determines which fingers are open (returns 1) or closed (returns 0) in a robust manner.
+        This method rotates the hand so it appears upright and then compares landmark positions.
+        
+        :param myHand: Dictionary containing hand info:
+                    - "type": "Right" or "Left"
+                    - "lmList": List of 21 landmarks (each a [x, y, z] list)
+        :return: List of 5 integers for [Thumb, Index, Middle, Ring, Pinky],
+                where 1 means the finger is open and 0 means closed.
         """
         fingers = []
         myHandType = myHand["type"]
         myLmList = myHand["lmList"]
-        if self.results.multi_hand_landmarks:
+        
+        # Check that there are enough landmarks
+        if not myLmList or len(myLmList) < 21:
+            return [0, 0, 0, 0, 0]
+        m_lmList = myLmList.copy()
+        for i in range(len(m_lmList)):
+            m_lmList[i][1] = -m_lmList[i][1]
+        
+        # Determine hand orientation using wrist (landmark 0) and middle finger MCP (landmark 9)
+        wx, wy, _ = m_lmList[0]
+        mx, my, _ = m_lmList[9]
+        angle = math.atan2(my - wy, mx - wx)  # angle relative to horizontal
+        rot_angle = -math.pi/2 -angle                   # rotation needed to make the hand upright
 
-            # Thumb
-            if myHandType == "Right":
-                if myLmList[self.tipIds[0]][0] > myLmList[self.tipIds[0] - 1][0]:
-                    fingers.append(1)
-                else:
-                    fingers.append(0)
-            else:
-                if myLmList[self.tipIds[0]][0] < myLmList[self.tipIds[0] - 1][0]:
-                    fingers.append(1)
-                else:
-                    fingers.append(0)
+        def rotate_point(p):
+            x, y, z = p
+            # Translate the point so that the wrist becomes the origin.
+            # Rotate the point by rot_angle using the 2D rotation formula.
 
-            # 4 Fingers
-            for id in range(1, 5):
-                if myLmList[self.tipIds[id]][1] < myLmList[self.tipIds[id] - 2][1]:
-                    fingers.append(1)
-                else:
-                    fingers.append(0)
+            x_rot = wx + (x - wx) * math.cos(rot_angle) - (y - wy) * math.sin(rot_angle) 
+            y_rot = wy + (x - wx) * math.sin(rot_angle) + (y - wy) * math.cos(rot_angle)
+            return (x_rot, y_rot)
+        
+        # Create a list of rotated landmarks.
+        rotated_points = [rotate_point(p) for p in m_lmList]
+        
+        # --- Thumb ---
+        # Compare the x-coordinates after rotation.
+        # For a right hand, if the thumb tip (landmark at self.tipIds[0]) is to the right of its preceding joint,
+        # the thumb is open. Reverse the condition for a left hand.
+        thumb_tip = rotated_points[self.tipIds[0]]
+        thumb_ip  = rotated_points[self.tipIds[0] - 1]
+        if myHandType == "Right":
+            fingers.append(1 if thumb_tip[0] < thumb_ip[0] else 0)
+        else:
+            fingers.append(1 if thumb_tip[0] > thumb_ip[0] else 0)
+        
+        # --- Other Fingers (Index, Middle, Ring, Pinky) ---
+        # For each of these fingers, if the fingertip (after rotation) is higher up 
+        # (i.e. has a smaller y-coordinate) than a lower joint (typically landmark index: tipId - 2),
+        # then the finger is considered open.
+        for i in range(1, 5):
+            tip = rotated_points[self.tipIds[i]]
+            lower_joint = rotated_points[self.tipIds[i] - 2]
+            fingers.append(0 if tip[1] > lower_joint[1] else 1)
+        
         return fingers
 
+    
     def findDistance(self, p1, p2, img=None, color=(255, 0, 255), scale=5):
         """
         Find the distance between two landmarks input should be (x1,y1) (x2,y2)
