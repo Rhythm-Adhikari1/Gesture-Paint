@@ -402,7 +402,6 @@ class DrawingApp:
 
             self.draw_shapes.line(self.canvas, (self.prev_x, self.prev_y), (x, y), color=self.get_color(), thickness= self.brush_thickness)
 
-                return
             
             # Draw line based on selected tool
             if self.brush_button_clicked:
