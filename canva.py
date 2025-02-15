@@ -3,578 +3,468 @@ import numpy as np
 from HandTrackingModule import HandDetector
 from shapes import Draw
 from clipping import clip_polygon
+import math
+from transform import Transformation
+import copy
+class DrawingApp:
+    def __init__(self):
+        # Initialize Camera
+        self.cap = cv2.VideoCapture(0)
+        self.w, self.h = 1280, 720
+        self.cap.set(3, self.w)
+        self.cap.set(4, self.h)
 
+        # Load Background Image
+        self.background_img = cv2.imread("image/image.png")
+        if self.background_img is None:
+            print("Error: Background image not loaded.")
+            exit(1)
 
-# Initialize Camera
-cap = cv2.VideoCapture(0)
-w, h = 1280, 720
-cap.set(3, w)
-cap.set(4, h)
+        # Initialize Hand Detector and drawing tool
+        self.detector = HandDetector(detectionCon=0.8)
+        self.transformation = Transformation()
+        self.draw_shapes = Draw()
 
-# Load Background Image
-image_path = "image/image.png"  # Ensure the path is correct
-background_img = cv2.imread(image_path)
+        # Persistent drawing canvas and dropped shapes
+        self.canvas = None
+        self.dropped_shapes = []
+        self.initial_square_coordinates = [(-50, -50), (50, -50), (50, 50), (-50, 50)]
 
-# Initialize Hand Detector
-detector = HandDetector(detectionCon=0.8)
-draw_shapes = Draw()
+        # Tool button states stored in dictionaries
+        self.shape_flags = {
+            "square": False,
+            "rectangle": False,
+            "triangle": False,
+            "line": False,
+            "circle": False,
+        }
+        self.brush_button_clicked = False
 
-# Persistent Drawing Canvas
-canDraw = False
-canvas = None
-square_selected = False           # (Not used in new dragging logic)
-selected_square_index = None      # Index of the currently selected polygon for dragging
-square_size = 50                  # Default size of square
-dropped_shapes = []               # List to store dropped square (polygon) coordinates
-square_button_clicked = False     # Whether the square button is active
-rectangle_button_clicked = False  # Whether the rectangle button is active
-triangle_button_clicked = False   # Whether the triangle button is active
-line_button_clicked = False       # Whether the line button is active
-circle_button_clicked = False     # Whether the circle button is active
-dragging = False                  # (Not used in new dragging logic)
-brush_button_clicked = False
-prev_x, prev_y = None, None       # Previous coordinates for brush drawing
-initial_square_coordinates = [(-50, -50), (50, -50), (50, 50), (-50, 50)]
-prev_index_x, prev_index_y = None, None  # Previous index finger coordinates for dragging
-drawing_canvas = [(30, 150), (1030, 150), (1030, h - 50), (30, h - 50)]
-red_color_clicked = False
-blue_color_clicked = False
-green_color_clicked = False
-yellow_color_clicked = False
+        # Color buttons (using dictionary for simplicity)
+        self.color_flags = {
+            "red": False,
+            "blue": False,
+            "green": False,
+            "yellow": False,
+        }
+        self.color_map = {
+            "red": (0, 0, 255),
+            "blue": (255, 0, 0),
+            "green": (0, 255, 0),
+            "yellow": (0, 255, 255),
+        }
 
+        # Variables for brush drawing
+        self.prev_x, self.prev_y = None, None
 
+        # Variables for dragging/resizing shapes
+        self.selected_shape_index = None
+        self.prev_index_x, self.prev_index_y = None, None
+        self.prev_angle = None
+        self.rotation = False
+        self.rot_selected_shape_index = None
+        self.scaling_selected_shape_index = None
+        self.initial_scaling_distance = None
+        self.original_shape_for_scaling = None
+        self. scaling = False
 
-# Define button areas
-buttons = {
-    "brush": [(20, 20), (100, 100)],
-    "eraser": [(120, 20), (200, 100)],
-    "square": [(620,20), (685, 95)],
-    "rectangle": [(700, 20), (775 , 95)],
-    "line": [(785, 20), (855, 95)],
-    "triangle": [(870, 20), (945 , 95)],
-    "circle" : [(955, 20), (1030, 95)],
-    "red": [(230, 20), (310, 100)],
-    "blue": [(325, 20), (495, 100)],
-    "green": [(380, 20), (485, 100)],
-    "yellow": [(495, 20), (575, 100)],
-    "undo" : [(865, 20), (950, 100)],
-    "redo" : [(1070, 20), (1150, 100)],
-}
+        # Define button areas as (top-left, bottom-right)
+        self.buttons = {
+            "brush": [(20, 20), (100, 100)],
+            "eraser": [(120, 20), (200, 100)],
+            "square": [(620, 20), (685, 95)],
+            "rectangle": [(700, 20), (775, 95)],
+            "line": [(785, 20), (855, 95)],
+            "triangle": [(870, 20), (945, 95)],
+            "circle": [(955, 20), (1030, 95)],
+            "red": [(230, 20), (310, 100)],
+            "blue": [(325, 20), (495, 100)],
+            "green": [(380, 20), (485, 100)],
+            "yellow": [(495, 20), (575, 100)],
+            "undo": [(865, 20), (950, 100)],
+            "redo": [(1070, 20), (1150, 100)],
+        }
 
-RED_COLOR_CODE = (0, 0, 255)       # Red in BGR
-BLUE_COLOR_CODE = (255, 0, 0)      # Blue in BGR
-GREEN_COLOR_CODE = (0, 255, 0)     # Green in BGR
-YELLOW_COLOR_CODE = (0, 255, 255)  # Yellow in BGR]
+    # ---------------------- Main Loop ----------------------
+    def run(self):
+        while self.cap.isOpened():
+            ret, frame = self.cap.read()
+            if not ret:
+                break
 
-# a function to check if the hand is placed inside the drawing canvas to draw only inside the drawing canvass.
+            frame = cv2.flip(frame, 1)
+            self.h, self.w, _ = frame.shape
 
-def check_hand_inside_canvas(index_x, index_y):
-    if(index_x > 30 and index_x < 1030 and index_y > 150 and index_y < (h-50)):
-        return True
-    return False
+            # Define drawing area and background
+            drawing_canvas = [(30, 150), (1030, 150), (1030, self.h - 50), (30, self.h - 50)]
+            background_resized = cv2.resize(self.background_img, (self.w, self.h))
+            if self.canvas is None:
+                self.canvas = np.zeros_like(background_resized)
 
-
-# disable other colors when selecting a color
-def select_color(color):
-    global red_color_clicked, blue_color_clicked, green_color_clicked, yellow_color_clicked
-    if(color == "red"):
-        blue_color_clicked = False
-        green_color_clicked = False
-        yellow_color_clicked = False
-    elif(color == "blue"):
-        red_color_clicked = False
-        green_color_clicked = False
-        yellow_color_clicked = False
-    elif(color == "yellow"):
-        red_color_clicked = False
-        green_color_clicked = False
-        blue_color_clicked = False
-    elif(color == "green"):
-        red_color_clicked = False
-        blue_color_clicked = False
-        yellow_color_clicked = False
-
-# determine which color is selected at present
-def get_color():
-    global red_color_clicked, blue_color_clicked, green_color_clicked, yellow_color_clicked
-    if(red_color_clicked):
-        return RED_COLOR_CODE
-    elif(blue_color_clicked):
-        return BLUE_COLOR_CODE
-    elif(green_color_clicked):
-        return GREEN_COLOR_CODE
-    elif(yellow_color_clicked):
-        return YELLOW_COLOR_CODE
-    else:
-        return RED_COLOR_CODE
-
-
-def is_index_up(hand):
-    """Returns True if only the index finger is up."""
-    fingers_up = detector.fingersUp(hand)
-    return fingers_up[0] == 0 and fingers_up[1] == 1 and all(f == 0 for f in fingers_up[2:])
-
-def is_all_finger_up(hand):
-    """Returns True if all fingers are up."""
-    fingers_up = detector.fingersUp(hand)
-    return all(f == 1 for f in fingers_up)
-
-def polygon(index_x, index_y, hand):
-    # Placeholder for polygon creation (if needed)
-    pass
-
-def square(index_x, index_y, hand):
-    global square_button_clicked, brush_button_clicked
-
-    # Square Button Coordinates
-    x1s, y1s, x2s, y2s = *buttons["square"][0], *buttons["square"][1]
-
-    # **Click Square Button (Only Index Finger Up)**
-    if x1s < index_x < x2s and y1s < index_y < y2s:
-        if is_index_up(hand):
-            square_button_clicked = True
-            brush_button_clicked = False
-            print("🟦 Square Button Clicked")
-
-    # **Drop a New Square (When Square Button is Active)**
-    if square_button_clicked and is_index_up(hand) and not (x1s < index_x < x2s and y1s < index_y < y2s):
-        updated_coordinates = [(x + index_x, y + index_y) for x, y in initial_square_coordinates]
-        dropped_shapes.append(updated_coordinates)  # Add new square to the list
-        square_button_clicked = False  # Reset button
-        print("📍 Square Dropped")
-        
-def rectangle(index_x, index_y, hand):
-    global rectangle_button_clicked, brush_button_clicked
-
-    # rectangle Button Coordinates
-    x1s, y1s, x2s, y2s = *buttons["rectangle"][0], *buttons["rectangle"][1]
-
-    # **Click rectangle Button (Only Index Finger Up)**
-    if x1s < index_x < x2s and y1s < index_y < y2s:
-        if is_index_up(hand):
-            rectangle_button_clicked = True
-            brush_button_clicked = False
-            print("🟦 rectangle Button Clicked")
-
-    # **Drop a New rectangle (When rectangle Button is Active)**
-    if rectangle_button_clicked and is_index_up(hand) and not (x1s < index_x < x2s and y1s < index_y < y2s):
-        updated_coordinates = [(x + index_x, y + index_y) for x, y in initial_square_coordinates]
-        dropped_shapes.append(updated_coordinates)  # Add new rectangle to the list
-        rectangle_button_clicked = False  # Reset button
-        print("📍 rectangle Dropped")
-
-
-def triangle(index_x, index_y, hand):
-    global triangle_button_clicked, brush_button_clicked
-
-    # Triangle Button Coordinates
-    x1t, y1t, x2t, y2t = *buttons["triangle"][0], *buttons["triangle"][1]
-
-    # **Click Triangle Button (Only Index Finger Up)**
-    if x1t < index_x < x2t and y1t < index_y < y2t:
-        if is_index_up(hand):
-            triangle_button_clicked = True
-            brush_button_clicked = False
-            print("🔺 Triangle Button Clicked")
-
-    # **Drop a New Triangle (When Triangle Button is Active)**
-    if triangle_button_clicked and is_index_up(hand) and not (x1t < index_x < x2t and y1t < index_y < y2t):
-        triangle_size = 50  # Adjust size as needed
-        updated_triangle_coordinates = [
-            (index_x, index_y - triangle_size),  # Top vertex
-            (index_x - triangle_size, index_y + triangle_size),  # Bottom left vertex
-            (index_x + triangle_size, index_y + triangle_size)   # Bottom right vertex
-        ]
-        dropped_shapes.append(updated_triangle_coordinates)  # Add new triangle to the list
-        triangle_button_clicked = False  # Reset button
-        print("📍 Triangle Dropped")
-        
-
-
-
-def draw_line(index_x, index_y, hand):
-    global line_button_clicked, brush_button_clicked
-
-    # Line Button Coordinates
-    x1l, y1l, x2l, y2l = *buttons["line"][0], *buttons["line"][1]
-
-    # **Click Line Button (Only Index Finger Up)**
-    if x1l < index_x < x2l and y1l < index_y < y2l:
-        if is_index_up(hand):
-            line_button_clicked = True
-            brush_button_clicked = False
-            print("📏 Line Button Clicked")
-
-    # **Drop a New Line (When Line Button is Active)**
-    if line_button_clicked and is_index_up(hand) and not (x1l < index_x < x2l and y1l < index_y < y2l):
-        line_length = 80  # Adjust as needed
-        updated_line_coordinates = [
-            (index_x - line_length // 2, index_y),  # Start point (Left)
-            (index_x + line_length // 2, index_y)   # End point (Right)
-        ]
-        dropped_shapes.append(updated_line_coordinates)  # Add new line to the list
-        line_button_clicked = False  # Reset button
-        print("📍 Line Dropped")
-        
-        
-def draw_circle(index_x, index_y, hand):
-    global circle_button_clicked, brush_button_clicked
-
-    # Circle Button Coordinates
-    x1c, y1c, x2c, y2c = *buttons["circle"][0], *buttons["circle"][1]
-
-    # **Click Circle Button (Only Index Finger Up)**
-    if x1c < index_x < x2c and y1c < index_y < y2c:
-        if is_index_up(hand):
-            circle_button_clicked = True
-            brush_button_clicked = False
-            print("⭕ Circle Button Clicked")
-
-    # **Drop a New Circle (When Circle Button is Active)**
-    if circle_button_clicked and is_index_up(hand) and not (x1c < index_x < x2c and y1c < index_y < y2c):
-        circle_radius = 40  # Adjust radius as needed
-        updated_circle_coordinates = (index_x, index_y, circle_radius)  # (CenterX, CenterY, Radius)
-        dropped_shapes.append(updated_circle_coordinates)  # Add new circle to the list
-        circle_button_clicked = False  # Reset button
-        print("📍 Circle Dropped")
-        
-
-        
-def brush(index_x, index_y, hand):
-    global brush_button_clicked, prev_x, prev_y, canvas, canDraw
-
-
-    canDraw = check_hand_inside_canvas(index_x, index_y)
-
-
-    x1b, y1b, x2b, y2b = *buttons["brush"][0], *buttons["brush"][1]
-
-    # **Click Brush Button**
-    if x1b < index_x < x2b and y1b < index_y < y2b:
-        if is_index_up(hand):  # Only Index Finger Up
-            brush_button_clicked = True
-            print("🖌 Brush Button Clicked")
-
-    # **Draw if Brush is Selected & Only Index Finger is Up**
-    elif brush_button_clicked and is_index_up(hand) and canDraw:
-        if prev_x is None or prev_y is None:
-            prev_x, prev_y = index_x, index_y  # Initialize previous position
-        cv2.line(canvas, (prev_x, prev_y), (index_x, index_y), get_color(), 5)  # Draw red line
-        prev_x, prev_y = index_x, index_y  # Update previous position
-    else:
-        prev_x, prev_y = None, None  # Reset when not drawing
-
-def red(index_x, index_y, hand):
-    global red_color_clicked, brush_button_clicked
-
-    #red button coordinates
-    x1s, y1s, x2s, y2s = *buttons["red"][0], *buttons["red"][1]
-
-    # **Click Square Button (Only Index Finger Up)**
-    if x1s < index_x < x2s and y1s < index_y < y2s:
-        if is_index_up(hand):
-            red_color_clicked = True
-            select_color("red")
-            print("🟦 Red color Clicked")
-
-def blue(index_x, index_y, hand):
-    global blue_color_clicked, brush_button_clicked
-
-    #red button coordinates
-    x1s, y1s, x2s, y2s = *buttons["blue"][0], *buttons["blue"][1]
-
-    # **Click Square Button (Only Index Finger Up)**
-    if x1s < index_x < x2s and y1s < index_y < y2s:
-        if is_index_up(hand):
-            blue_color_clicked = True
-            select_color("blue")
-            print("🟦 Blue color Clicked")
-
-def green(index_x, index_y, hand):
-    global green_color_clicked, brush_button_clicked
-
-    #red button coordinates
-    x1s, y1s, x2s, y2s = *buttons["green"][0], *buttons["green"][1]
-
-    # **Click Square Button (Only Index Finger Up)**
-    if x1s < index_x < x2s and y1s < index_y < y2s:
-        if is_index_up(hand):
-            green_color_clicked = True
-            select_color("green")
-            print("🟦 Green color Clicked")
-
-def yellow(index_x, index_y, hand):
-    global yellow_color_clicked, brush_button_clicked
-
-    #red button coordinates
-    x1s, y1s, x2s, y2s = *buttons["yellow"][0], *buttons["yellow"][1]
-
-    # **Click Square Button (Only Index Finger Up)**
-    if x1s < index_x < x2s and y1s < index_y < y2s:
-        if is_index_up(hand):
-            yellow_color_clicked = True
-            select_color("yellow")
-            print("🟦 Yellow color Clicked")
-            
-            
-            
+            # Det print("here")ect hands
+            hands, frame = self.detector.findHands(frame, img_to_draw=background_resized)
+           
             
 
-# Global variable to track the currently selected shape for resizing
-selected_shape = None  # To track the selected shape (index of shape in dropped_shapes)
-selected_shape_type = None  # To track the type of the selected shape (square, rectangle, etc.)
+            if hands:
+                drawing_hand = None
+                helping_hand = None
 
-def select_shape_for_resizing(index_x, index_y):
-    """Detect and select a shape that the user wants to resize."""
-    global selected_shape, selected_shape_type
-    for i, shape in enumerate(dropped_shapes):
-        if selected_shape_type == "square" or selected_shape_type == "rectangle":
-            # For square/rectangle, check if the click is inside the bounding box
-            if is_point_in_bounding_box(index_x, index_y, shape):
-                selected_shape = i
-                selected_shape_type = "square" if len(shape) == 4 else "rectangle"
-                print(f"Selected {selected_shape_type.capitalize()} for resizing")
-                return True
-        elif selected_shape_type == "circle":
-            # For circle, check if the click is inside the circle
-            if is_point_in_circle(index_x, index_y, shape):
-                selected_shape = i
-                selected_shape_type = "circle"
-                print("Selected Circle for resizing")
-                return True
-    return False
+                
 
-def is_point_in_bounding_box(x, y, shape):
-    """Check if a point is inside the bounding box of the shape."""
-    min_x = min([p[0] for p in shape])
-    max_x = max([p[0] for p in shape])
-    min_y = min([p[1] for p in shape])
-    max_y = max([p[1] for p in shape])
-    return min_x <= x <= max_x and min_y <= y <= max_y
+                if len(hands) == 1:
+                    drawing_hand = hands[0]
+                elif len(hands) == 2:
 
-def is_point_in_circle(x, y, circle):
-    """Check if a point is inside a circle."""
-    center_x, center_y, radius = circle
-    return (x - center_x) ** 2 + (y - center_y) ** 2 <= radius ** 2
-
-def reshape_selected_shape(index_x, index_y):
-    """Reshape the selected shape."""
-    global selected_shape, selected_shape_type
-    if selected_shape is None:
-        return
-    
-    # Update the shape based on the selected type
-    if selected_shape_type == "square" or selected_shape_type == "rectangle":
-        shape = dropped_shapes[selected_shape]
-        width = index_x - shape[0][0]
-        height = index_y - shape[0][1]
-        updated_shape = [(shape[0][0], shape[0][1]), (shape[0][0] + width, shape[0][1]), 
-                         (shape[0][0] + width, shape[0][1] + height), (shape[0][0], shape[0][1] + height)]
-        dropped_shapes[selected_shape] = updated_shape
-        print(f"Reshaped {selected_shape_type.capitalize()}")
-    
-    elif selected_shape_type == "circle":
-        circle = dropped_shapes[selected_shape]
-        radius = int(((index_x - circle[0]) ** 2 + (index_y - circle[1]) ** 2) ** 0.5)
-        dropped_shapes[selected_shape] = (circle[0], circle[1], radius)
-        print("Reshaped Circle")
-        
-    selected_shape = None  # Reset after reshaping
-
-# In your main loop, update the shape when the user drags the selected shape
-def handle_drag_and_reshape(index_x, index_y, hand):
-    """Handle shape dragging and reshaping."""
-    global selected_shape, selected_shape_type  # Declare as global to avoid UnboundLocalError
-    if is_index_up(hand):  # Index finger up indicates interaction
-        if selected_shape is None:  # Select the shape if not selected
-            select_shape_for_resizing(index_x, index_y)
-        else:  # If a shape is selected, reshape it
-            reshape_selected_shape(index_x, index_y)
-    else:
-        selected_shape = None  # Reset if index finger is not up
-                   
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
+                    for hand in hands:
+                        if hand["type"] == "Left":
+                            drawing_hand = hand
+                        else:
+                            helping_hand = hand
+                
+                if drawing_hand and helping_hand:
+                    self.handle_reshaping(drawing_hand, helping_hand)
+                    self.handle_rotating(drawing_hand, helping_hand)
+                
+                if drawing_hand:
+                    self.process_hand_buttons(drawing_hand)
+                    self.handle_dragging(drawing_hand)
 
 
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break
 
-    frame = cv2.flip(frame, 1)  # Flip for better interaction
-    h, w, _ = frame.shape
+                
+                
+                
+                    
 
-    # Resize Background Image
-    if background_img is None:
-        print("Error: Background image not loaded.")
-        exit()
-    background_resized = cv2.resize(background_img, (w, h))
+            # Merge canvas and render shapes
+            combined = self.render_canvas(background_resized, drawing_canvas)
+            cv2.imshow("Virtual Canvas", combined)
+            self.rotation = False
 
-    # Initialize canvas if not already created
-    if canvas is None:
-        canvas = np.zeros_like(background_resized)  # Persistent drawing board
+            if cv2.waitKey(1) == ord('q'):
+                break
 
-    # Detect Hands
-    hands, frame = detector.findHands(frame, img_to_draw=background_resized)
+        self.cap.release()
+        cv2.destroyAllWindows()
 
-    if hands:
-        # Check number of hands detected for dragging or reshaping
-        num_of_hands = len(hands)
-        # if num_of_hands == 1:  # Two hands detected - dragging mode
-        #     print("One hands detected")
-        #     dragging = True
-        #     reshaping = False
-        # if num_of_hands == 2:  # One hand detected - reshaping mode
-        #     print("Two hand detected")
-        #     dragging = False
-        #     reshaping = True
-        #     selected_square_index = None
-            # print("Two hands detected - Reshaping mode activated")
-        if num_of_hands == 2:  # Two hands detected - reshaping mode
-            print("Two hands detected")
-            dragging = False
-            reshaping = True
-            hand1_index = hands[0]["lmList"][8][:2]  # Index finger of first hand
-            hand2_index = hands[1]["lmList"][8][:2]  # Index finger of second hand
-        
-            distance = int(((hand1_index[0] - hand2_index[0])**2 + 
-                       (hand1_index[1] - hand2_index[1])**2)**0.5)
+    # ---------------------- Helper Methods ----------------------
+    def point_in_rect(self, x, y, rect):
+        (x1, y1), (x2, y2) = rect
+        return x1 < x < x2 and y1 < y < y2
 
-            if selected_square_index is not None:
-            # Reshape based on distance
-                shape = dropped_shapes[selected_square_index]
-                if isinstance(shape, tuple):  # If it's a circle
-                    center_x, center_y, _ = shape
-                    dropped_shapes[selected_square_index] = (center_x, center_y, distance//2)
-                else:  # If it's a polygon (square, rectangle, triangle)
-                    center_x = sum(x for x, _ in shape) / len(shape)
-                    center_y = sum(y for _, y in shape) / len(shape)
-                    size = distance // 2
+    def check_hand_inside_canvas(self, x, y):
+        return 30 < x < 1030 and 150 < y < (self.h - 50)
 
-                    if len(shape) == 4:  # Square or rectangle
-                        dropped_shapes[selected_square_index] = [
-                            (center_x - size, center_y - size),
-                            (center_x + size, center_y - size),
-                            (center_x + size, center_y + size),
-                            (center_x - size, center_y + size)
-                        ]
-                    elif len(shape) == 3:  # Triangle
-                        dropped_shapes[selected_square_index] = [
-                            (center_x, center_y - size),
-                            (center_x - size, center_y + size),
-                            (center_x + size, center_y + size)
-                        ]       
-        elif num_of_hands == 1:  # One hand detected - dragging mode
-            print("One hand detected")
-            dragging = True
-            reshaping = False
-            
-            
-        for hand in hands:
-            lm_list = hand["lmList"]
-            index_x, index_y = lm_list[8][:2]  # Index finger tip
+    def is_index_up(self, hand):
+        """Return True if only the index finger is up."""
+        fingers_up = self.detector.fingersUp(hand)
+        return fingers_up[0] == 0 and fingers_up[1] == 1 and all(f == 0 for f in fingers_up[2:])
 
-            # Process button actions (create square, brush, etc.)
-            square(index_x, index_y, hand)
-            brush(index_x, index_y, hand)
-            red(index_x, index_y, hand)
-            blue(index_x, index_y, hand)
-            green(index_x, index_y, hand)
-            yellow(index_x, index_y, hand)
-            rectangle(index_x, index_y, hand)
-            triangle(index_x, index_y, hand)
-            draw_line(index_x, index_y, hand)
-            draw_circle(index_x, index_y, hand)
-            reshape_selected_shape(index_x, index_y)  # Shape reshaping logic
-            handle_drag_and_reshape(index_x, index_y, hand)  # Hand gesture handling
+    def get_color(self):
+        for color, flag in self.color_flags.items():
+            if flag:
+                return self.color_map[color]
+        return self.color_map["red"]
 
-            
-            if reshaping:
-                reshape_selected_shape(index_x, index_y)
-            
-            elif dragging:
-                if is_index_up(hand):
-                    if selected_square_index is not None:
-                        if prev_index_x is None or prev_index_y is None:
-                            prev_index_x, prev_index_y = index_x, index_y
-                        dx = index_x - prev_index_x
-                        dy = index_y - prev_index_y
-                        dropped_shapes[selected_square_index] = [
-                            (x + dx, y + dy) for (x, y) in dropped_shapes[selected_square_index]
-                        ]
-                        prev_index_x, prev_index_y = index_x, index_y
-                    else:
-                        for i in range(len(dropped_shapes) - 1, -1, -1):
-                            coordinates_numpy = np.array(dropped_shapes[i], np.int32)
-                            if cv2.pointPolygonTest(coordinates_numpy, (index_x, index_y), False) >= 0:
-                                selected_square_index = i
-                                prev_index_x, prev_index_y = index_x, index_y
-                                print(f"🔄 Polygon {i} selected for dragging")
-                                break
+    def render_canvas(self, background, drawing_canvas):
+        combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
+        for shape in self.dropped_shapes:
+            if shape:
+                clipped = clip_polygon(shape, drawing_canvas)
+                if clipped:
+                    self.draw_shapes.polygon(combined, points=clipped, color=(0, 255, 0))
+        return combined
 
-            # Handling Reshaping
-            if reshaping and is_index_up(hand):  # Detecting reshaping gesture (index up)
-                if selected_square_index is not None:  # Reshape selected polygon
-                    # Example: Reshape the selected shape, like a square
-                    reshape_selected_shape(index_x, index_y)  # You might want to check condition here
-
-            #print cooridinates
-            # print(index_x, index_y)
-
-            # -----------------------------
-            # DRAGGING LOGIC (Selection & Movement)
-            # -----------------------------
-            if is_index_up(hand):  # If the index finger is up, handle dragging
-                if selected_square_index is not None:
-                    if prev_index_x is None or prev_index_y is None:
-                        prev_index_x, prev_index_y = index_x, index_y
-                    dx = index_x - prev_index_x
-                    dy = index_y - prev_index_y
-                    # Move the selected polygon
-                    dropped_shapes[selected_square_index] = [
-                        (x + dx, y + dy) for (x, y) in dropped_shapes[selected_square_index]
-                    ]
-                    prev_index_x, prev_index_y = index_x, index_y
-                else:
-                    # If no polygon selected, select one
-                    for i in range(len(dropped_shapes) - 1, -1, -1):
-                        coordinates_numpy = np.array(dropped_shapes[i], np.int32)
-                        if cv2.pointPolygonTest(coordinates_numpy, (index_x, index_y), False) >= 0:
-                            selected_square_index = i
-                            prev_index_x, prev_index_y = index_x, index_y
-                            print(f"🔄 Polygon {i} selected for dragging")
-                            break
+    def select_shape_at(self, x, y):
+        """Return the index of a shape that contains point (x,y), or None."""
+        for i in range(len(self.dropped_shapes) - 1, -1, -1):
+            shape = self.dropped_shapes[i]
+            if isinstance(shape, tuple):
+                if self.is_point_in_circle(x, y, shape):
+                    print(f"Circle {i} selected for dragging")
+                    return i
             else:
-                selected_square_index = None  # Clear selection if index is not up
-                prev_index_x, prev_index_y = None, None
+                pts = np.array(shape, np.int32)
+                if cv2.pointPolygonTest(pts, (x, y), False) >= 0:
+                    print(f"Shape {i} selected for dragging")
+                    return i
+        return None
 
-    # Merge canvas with background to keep drawings persistent
-    combined = cv2.addWeighted(background_resized, 0.8, canvas, 1, 0)
+    def is_point_in_circle(self, x, y, circle):
+        cx, cy, r = circle
+        return (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2
 
-    # Draw all polygons (after clipping)
-    for shape in dropped_shapes:
-        if shape:
-            clipped_shape = clip_polygon(shape, drawing_canvas)
-            if clipped_shape:
-                draw_shapes.polygon(combined, points=clipped_shape, color=(0, 255, 0))
+    # ---------------------- Generic Tool Handlers ----------------------
+    def handle_shape_button(self, tool, drop_func, x, y, hand):
+        """Generic handler for shape buttons (square, rectangle, etc.)."""
+        rect = self.buttons[tool]
+        if self.point_in_rect(x, y, rect):
+            if self.is_index_up(hand):
+                self.shape_flags[tool] = True
+                self.brush_button_clicked = False
+                print(f"{tool.capitalize()} Button Clicked")
+        elif self.shape_flags.get(tool, False) and self.is_index_up(hand):
+            self.dropped_shapes.append(drop_func(x, y))
+            self.shape_flags[tool] = False
+            print(f"{tool.capitalize()} Dropped")
 
-    # Show Output
-    cv2.imshow("Virtual Canvas", combined)
+    def handle_color_button(self, color, x, y, hand):
+        """Generic handler for color buttons."""
+        rect = self.buttons[color]
+        if self.point_in_rect(x, y, rect) and self.is_index_up(hand):
+            for c in self.color_flags:
+                self.color_flags[c] = (c == color)
+            print(f"{color.capitalize()} Color Clicked")
 
-    key = cv2.waitKey(1)
-    if key == ord('q'):
-        break
+    def handle_brush(self, x, y, hand):
+        rect = self.buttons["brush"]
+        if self.point_in_rect(x, y, rect):
+            if self.is_index_up(hand):
+                self.brush_button_clicked = True
+                print("Brush Button Clicked")
+        elif self.brush_button_clicked and self.is_index_up(hand) and self.check_hand_inside_canvas(x, y):
+            if self.prev_x is None or self.prev_y is None:
+                self.prev_x, self.prev_y = x, y
+            cv2.line(self.canvas, (self.prev_x, self.prev_y), (x, y), self.get_color(), 5)
+            self.prev_x, self.prev_y = x, y
+        else:
+            self.prev_x, self.prev_y = None, None
 
-cap.release()
-cv2.destroyAllWindows()
+    # ---------------------- Drop Functions for Shapes ----------------------
+    def drop_square(self, x, y):
+        return [(dx + x, dy + y) for dx, dy in self.initial_square_coordinates]
+
+    def drop_rectangle(self, x, y):
+        return [(dx + x, dy + y) for dx, dy in self.initial_square_coordinates]
+
+    def drop_triangle(self, x, y):
+        triangle_size = 50
+        return [(x, y - triangle_size),
+                (x - triangle_size, y + triangle_size),
+                (x + triangle_size, y + triangle_size)]
+
+    def drop_line(self, x, y):
+        line_length = 80
+        return [(x - line_length // 2, y), (x + line_length // 2, y)]
+
+    def drop_circle(self, x, y):
+        circle_radius = 40
+        return (x, y, circle_radius)
+
+    # ---------------------- Process Hand Buttons ----------------------
+    def process_hand_buttons(self, hand):
+        lm_list = hand["lmList"]
+        x, y = lm_list[8][:2]
+        # Process shape buttons
+        self.handle_shape_button("square", self.drop_square, x, y, hand)
+        self.handle_shape_button("rectangle", self.drop_rectangle, x, y, hand)
+        self.handle_shape_button("triangle", self.drop_triangle, x, y, hand)
+        self.handle_shape_button("line", self.drop_line, x, y, hand)
+        self.handle_shape_button("circle", self.drop_circle, x, y, hand)
+        # Process brush tool
+        self.handle_brush(x, y, hand)
+        # Process color buttons
+        self.handle_color_button("red", x, y, hand)
+        self.handle_color_button("blue", x, y, hand)
+        self.handle_color_button("green", x, y, hand)
+        self.handle_color_button("yellow", x, y, hand)
+
+    # ---------------------- Dragging & Reshaping ----------------------
+    def handle_dragging(self, hand):
+
+
+        if self.rotation:
+            return
+        
+        lm_list = hand["lmList"]
+        x, y = lm_list[8][:2]
+
+
+
+        if self.is_index_up(hand):
+            if self.selected_shape_index is not None:
+                #if self.rotation == True:
+                #    return
+                
+                # Drag the selected shape
+
+                
+                
+                if self.prev_index_x is None or self.prev_index_y is None:
+                    self.prev_index_x, self.prev_index_y = x, y
+                dx = x - self.prev_index_x
+                dy = y - self.prev_index_y
+                shape = self.dropped_shapes[self.selected_shape_index]
+                if isinstance(shape, tuple):
+                    cx, cy, r = shape
+                    self.dropped_shapes[self.selected_shape_index] = (cx + dx, cy + dy, r)
+                else:
+                    self.dropped_shapes[self.selected_shape_index] = [
+                        (px + dx, py + dy) for (px, py) in shape
+                    ]
+                self.prev_index_x, self.prev_index_y = x, y
+            else:
+                # Try to select a shape under the finger
+                self.selected_shape_index = self.select_shape_at(x, y)
+                if self.selected_shape_index is not None:
+                    self.prev_index_x, self.prev_index_y = x, y
+        else:
+            self.selected_shape_index = None
+            self.prev_index_x, self.prev_index_y = None, None
+
+    
+    def is_index_and_thump_up(self,hand):
+        fingers = self.detector.fingersUp(hand)
+        return fingers[0] == 1 and fingers[1] == 1 and fingers[2] == 0 and fingers[3] == 0 and fingers[4] ==0
+
+
+  
+
+    def handle_reshaping(self, right_hand, left_hand):
+        
+         # Check for the correct scaling gesture
+        if self.is_index_up(right_hand) and self.is_index_and_thump_up(left_hand):
+            l_lmList = left_hand["lmList"]
+            r_lmList = right_hand["lmList"]
+
+            # Get the right-hand index tip coordinates
+            px, py = r_lmList[8][:2]
+
+            # If no shape is currently selected for scaling, select one using the right-hand tip.
+            if self.scaling_selected_shape_index is None:
+                self.scaling_selected_shape_index = self.select_shape_at(px, py)
+                # Reset the initial values for a new gesture.
+                self.initial_scaling_distance = None
+                self.original_shape_for_scaling = None
+
+            if self.scaling_selected_shape_index is not None:
+                # Compute the current distance between left-hand index and thumb tips
+                index_tip = np.array(l_lmList[8][:2])
+                thumb_tip = np.array(l_lmList[4][:2])
+                current_distance = np.linalg.norm(index_tip - thumb_tip)
+
+                # On the first frame of the gesture, store the initial distance and a deep copy of the current (rotated) shape.
+                if self.initial_scaling_distance is None:
+                    self.initial_scaling_distance = current_distance
+                    self.original_shape_for_scaling = copy.deepcopy(
+                        self.dropped_shapes[self.scaling_selected_shape_index]
+                    )
+
+                # Calculate scaling ratio relative to the initial gesture distance.
+                scaling_ratio = current_distance / self.initial_scaling_distance
+                print(f"Current distance: {current_distance}, Scaling ratio: {scaling_ratio}")
+
+                # Use the stored original shape (which already includes any rotation)
+                selected_shape = self.original_shape_for_scaling
+
+                # Compute the centroid of the shape to use as pivot
+                pts = np.array(selected_shape)
+                pivx, pivy = np.mean(pts, axis=0)
+
+                # Scale the shape with respect to the pivot.
+                # IMPORTANT: Ensure your transformation.scale function implements:
+                #   new_point = pivot + scaling_ratio * (point - pivot)
+                scaled_shape = self.transformation.scale(
+                    points=selected_shape,
+                    pivot=(pivx, pivy),
+                    sx=scaling_ratio,
+                    sy=scaling_ratio
+                )
+                print("Shape scaled based on gesture.")
+                self.dropped_shapes[self.scaling_selected_shape_index] = scaled_shape
+        else:
+            # When the gesture is not active, reset scaling state.
+            self.scaling_selected_shape_index = None
+            self.initial_scaling_distance = None
+            self.original_shape_for_scaling = None
+            self.scaling = False
+
+
+    def is_hand_closed(self, hand):
+        fingers_up = self.detector.fingersUp(hand)
+        return sum(fingers_up) == 0
+    
+    def index_and_middle_up(self, hand):
+        fingers_up = self.detector.fingersUp(hand)
+        return fingers_up[0] == 0 and fingers_up[1] == 1 and fingers_up[2] == 1 and fingers_up[3] == 0 and fingers_up[4] ==0
+    
+    
+    def handle_rotating(self, right_hand, left_hand):
+                
+        if self.is_index_up(right_hand) and self.is_hand_closed(left_hand):
+
+            l_lmList = left_hand["lmList"]
+            r_lmList = right_hand["lmList"]
+            print("Rotating gesture detected")
+
+            px, py = r_lmList[8][:2]
+            wx, wy, _ = l_lmList[0]  
+            mx, my, _ = l_lmList[9]  
+
+            # Compute the current angle (in radians)
+            angle = math.atan2(-my + wy, mx - wx)
+          
+            if self.rot_selected_shape_index is not None:
+
+                self.rotation = True
+
+                print(f"Shape {self.rot_selected_shape_index} selected for rotating")
+
+                if self.prev_angle is None:
+                    self.prev_angle = angle  # Set initial angle
+
+                # Calculate angle difference (in radians)
+                dtheta = angle - self.prev_angle  
+                print(dtheta)
+                # Convert angle difference to degrees
+                dtheta_deg = np.degrees(dtheta)
+                sensitivity = 2  # Adjust sensitivity multiplier as needed
+
+                selected_shape = self.dropped_shapes[self.rot_selected_shape_index]
+                if isinstance(selected_shape, tuple):
+                    return  # Skip circles for rotation
+
+                print(selected_shape)
+                for i in range(len(selected_shape)):
+                    selected_shape[i] = (selected_shape[i][0], -selected_shape[i][1])
+
+                # Compute the centroid of the shape (pivot remains constant)
+                pivx, pivy = 0, 0
+                for x, y in selected_shape:
+                    pivx += x
+                    pivy += y
+                pivx /= len(selected_shape)
+                pivy /= len(selected_shape)
+
+                # Rotate the shape by the computed degree difference times sensitivity
+                rotated_shape = self.transformation.rotate(selected_shape, (pivx, pivy), dtheta_deg * sensitivity)
+
+                # Update the shape with its rotated coordinates
+
+                for i in range(len(rotated_shape)):
+                    rotated_shape[i] = (rotated_shape[i][0], -rotated_shape[i][1])
+
+
+                self.dropped_shapes[self.rot_selected_shape_index] = rotated_shape
+
+                # Update previous angle for the next frame
+                self.prev_angle = angle
+
+
+            else:
+                self.rot_selected_shape_index = self.select_shape_at(px, py)
+                print("ROTATION SHAPE INDEX", self.rot_selected_shape_index)
+                if self.rot_selected_shape_index is not None:
+                    self.prev_angle = angle
+
+        else:
+            # Reset rotation state when the gesture is no longer active
+            self.rot_selected_shape_index = None
+            self.prev_angle = None
+
+
+
+if __name__ == '__main__':
+    app = DrawingApp()
+    app.run()
