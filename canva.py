@@ -15,7 +15,11 @@ class DrawingApp:
         self.cap.set(4, self.h)
         self.eraser_button_clicked = False
         
-
+        self.vertex_selection_radius = 10  # Radius to detect vertex clicks
+        self.selected_vertex_index = None  # Track which vertex is selected
+        self.selected_vertex_shape = None  # Track which shape the selected vertex belongs to
+        
+        
         # Load Background Image
         self.background_img = cv2.imread("image/image.png")
         if self.background_img is None:
@@ -87,7 +91,89 @@ class DrawingApp:
             "redo": [(1070, 20), (1150, 100)],
         }
     
+    def select_vertex_at(self, x, y):
+        """Check if a vertex is clicked and return (shape_index, vertex_index)."""
+        for shape_idx, shape in enumerate(self.dropped_shapes):
+            if isinstance(shape, tuple):  # Skip circles
+                continue
+            
+            for vertex_idx, (vx, vy) in enumerate(shape):
+                # Check if point is within vertex selection radius
+                if (x - vx)**2 + (y - vy)**2 <= self.vertex_selection_radius**2:
+                    print(f"Vertex {vertex_idx} of shape {shape_idx} selected")
+                    return shape_idx, vertex_idx
+        return None, None
     
+    
+    def handle_vertex_dragging(self, hand):
+        """Handle vertex dragging for true geometric shearing while preserving parallelism."""
+        if self.rotation or self.scaling:
+            return
+
+        lm_list = hand["lmList"]
+        x, y = lm_list[8][:2]
+
+        if self.is_index_up(hand):
+            if self.selected_vertex_shape is None:
+                shape_idx, vertex_idx = self.select_vertex_at(x, y)
+                if shape_idx is not None:
+                    self.selected_vertex_shape = shape_idx
+                    self.selected_vertex_index = vertex_idx
+            else:
+                shape = self.dropped_shapes[self.selected_vertex_shape]
+                if not isinstance(shape, tuple) and self.check_hand_inside_canvas(x, y):
+                    shape_list = list(shape)
+                    num_vertices = len(shape_list)
+                    
+                    # Get selected vertex and its initial position
+                    orig_x, orig_y = shape_list[self.selected_vertex_index]
+                    
+                    # Determine the base edge (the edge that remains fixed during shear)
+                    next_vertex = (self.selected_vertex_index + 1) % num_vertices
+                    prev_vertex = (self.selected_vertex_index - 1) % num_vertices
+                    
+                    next_x, next_y = shape_list[next_vertex]
+                    prev_x, prev_y = shape_list[prev_vertex]
+                    
+                    # Determine if this is a vertical or horizontal shear
+                    is_vertical = abs(orig_x - next_x) < 10 or abs(orig_x - prev_x) < 10
+                    
+                    # Calculate shear factor and apply transformation
+                    if is_vertical:
+                        # Vertical shear: keep x-coordinates of the base edge fixed
+                        base_x = prev_x if abs(orig_x - prev_x) < 10 else next_x
+                        shear_factor = (x - orig_x) / (self.h / 2)  # Normalize by canvas height
+                        
+                        # Apply vertical shear transformation
+                        for i in range(num_vertices):
+                            px, py = shape_list[i]
+                            if i == self.selected_vertex_index:
+                                shape_list[i] = (x, y)
+                            elif abs(px - base_x) > 10:  # Don't move vertices on the base edge
+                                # Shear transformation: x' = x + shear_factor * (py - orig_y)
+                                new_x = px + shear_factor * (py - orig_y)
+                                shape_list[i] = (new_x, py)
+                    else:
+                        # Horizontal shear: keep y-coordinates of the base edge fixed
+                        base_y = prev_y if abs(orig_y - prev_y) < 10 else next_y
+                        shear_factor = (y - orig_y) / (self.w / 2)  # Normalize by canvas width
+                        
+                        # Apply horizontal shear transformation
+                        for i in range(num_vertices):
+                            px, py = shape_list[i]
+                            if i == self.selected_vertex_index:
+                                shape_list[i] = (x, y)
+                            elif abs(py - base_y) > 10:  # Don't move vertices on the base edge
+                                # Shear transformation: y' = y + shear_factor * (px - orig_x)
+                                new_y = py + shear_factor * (px - orig_x)
+                                shape_list[i] = (px, new_y)
+                    
+                    self.dropped_shapes[self.selected_vertex_shape] = shape_list
+        else:
+            self.selected_vertex_shape = None
+            self.selected_vertex_index = None
+            
+            
     # ---------------------- Main Loop ----------------------
     def run(self):
         """Main loop for the application."""
@@ -131,8 +217,14 @@ class DrawingApp:
                 
                 # Handle single-hand gestures
                 if drawing_hand:
-                    self.process_hand_buttons(drawing_hand)
-                    self.handle_dragging(drawing_hand)
+                    if not self.process_hand_buttons(drawing_hand):
+                        self.handle_vertex_dragging(drawing_hand)  # Try vertex dragging first
+                        # self.handle_dragging(drawing_hand)
+                        if self.selected_vertex_shape is None:
+                            self.handle_dragging(drawing_hand)
+                        
+                    # self.process_hand_buttons(drawing_hand)
+                    # self.handle_dragging(drawing_hand)
 
             # Merge canvas and render shapes
             combined = self.render_canvas(background_resized, drawing_canvas)
@@ -278,9 +370,6 @@ class DrawingApp:
             
             # Update previous position
             self.prev_x, self.prev_y = x, y
-            
-            # Save snapshot after drawing
-            
         else:
             # Reset previous position when not drawing
             self.prev_x, self.prev_y = None, None
@@ -333,7 +422,7 @@ class DrawingApp:
     def handle_dragging(self, hand):
         """Handle shape dragging with state saving."""
         # Skip if rotation is active
-        if self.rotation:
+        if self.rotation or self.selected_vertex_shape is not None:
             return
         
         lm_list = hand["lmList"]
