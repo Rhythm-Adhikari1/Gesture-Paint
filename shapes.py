@@ -16,7 +16,7 @@ class Draw:
         sx = 1 if x2 > x1 else -1  
         sy = 1 if y2 > y1 else -1  
         err = dx - dy  
-
+        
         while True:
             img[y1, x1] = color 
             if x1 == x2 and y1 == y2:  
@@ -33,6 +33,7 @@ class Draw:
 
     def polygon(self, img, points, color):
         n = len(points)
+    
         for i in range(n):
             if i < (n-1):
                 self.line(img, points[i], points[i+1],color=color)

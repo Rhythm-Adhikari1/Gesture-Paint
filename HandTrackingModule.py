@@ -153,6 +153,9 @@ class HandDetector:
             tip = rotated_points[self.tipIds[i]]
             lower_joint = rotated_points[self.tipIds[i] - 2]
             fingers.append(0 if tip[1] > lower_joint[1] else 1)
+
+        for i in range(len(m_lmList)):
+            m_lmList[i][1] = -m_lmList[i][1]
         
         return fingers
 
