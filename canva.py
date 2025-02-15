@@ -30,6 +30,7 @@ class DrawingApp:
         self.canvas = None
         self.dropped_shapes = []
         self.initial_square_coordinates = [(-50, -50), (50, -50), (50, 50), (-50, 50)]
+        self.default_color = (0, 0, 255)  # Default color is red
 
         # Tool button states stored in dictionaries
         self.shape_flags = {
@@ -137,12 +138,6 @@ class DrawingApp:
                 
 
 
-
-                
-                
-                
-                    
-
             # Merge canvas and render shapes
             combined = self.render_canvas(background_resized, drawing_canvas)
             cv2.imshow("Virtual Canvas", combined)
@@ -175,23 +170,24 @@ class DrawingApp:
 
     def render_canvas(self, background, drawing_canvas):
         combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
-        for shape in self.dropped_shapes:
+        for shape, color in self.dropped_shapes:
             if shape:
                 if isinstance(shape, tuple):
                     # Handle circle drawing
                     cx, cy, r = shape
-                    cv2.circle(combined, (int(cx), int(cy)), int(r), (0, 0, 255), 2)
+                    cv2.circle(combined, (int(cx), int(cy)), int(r), color, 1)
                 else:
                     # Handle polygon shapes
                     clipped = clip_polygon(shape, drawing_canvas)
                     if clipped:
-                        self.draw_shapes.polygon(combined, points=clipped, color=(0, 0, 255))
+                        self.draw_shapes.polygon(combined, points=clipped, color=color)
         return combined
 
     def select_shape_at(self, x, y):
         """Return the index of a shape that contains point (x,y), or None."""
         for i in range(len(self.dropped_shapes) - 1, -1, -1):
-            shape = self.dropped_shapes[i]
+            shape_info = self.dropped_shapes[i]
+            shape = shape_info[0]
             if isinstance(shape, tuple):
                 if self.is_point_in_circle(x, y, shape):
                     print(f"Circle {i} selected for dragging")
@@ -245,24 +241,24 @@ class DrawingApp:
 
     # ---------------------- Drop Functions for Shapes ----------------------
     def drop_square(self, x, y):
-        return [(dx + x, dy + y) for dx, dy in self.initial_square_coordinates]
+        return ([(dx + x, dy + y) for dx, dy in self.initial_square_coordinates], self.get_color())
 
     def drop_rectangle(self, x, y):
-        return [(dx + x, dy + y) for dx, dy in self.initial_square_coordinates]
+        return ([(dx + x, dy + y) for dx, dy in self.initial_square_coordinates], self.get_color())
 
     def drop_triangle(self, x, y):
         triangle_size = 50
-        return [(x, y - triangle_size),
+        return ([(x, y - triangle_size),
                 (x - triangle_size, y + triangle_size),
-                (x + triangle_size, y + triangle_size)]
+                (x + triangle_size, y + triangle_size)], self.get_color())
 
     def drop_line(self, x, y):
         line_length = 80
-        return [(x - line_length // 2, y), (x + line_length // 2, y)]
+        return ([(x - line_length // 2, y), (x + line_length // 2, y)], self.get_color())
 
     def drop_circle(self, x, y):
         circle_radius = 40
-        return (x, y, circle_radius)
+        return (x, y, circle_radius), self.get_color()
 
     # ---------------------- Process Hand Buttons ----------------------
     def process_hand_buttons(self, hand):
@@ -307,14 +303,12 @@ class DrawingApp:
                     self.prev_index_x, self.prev_index_y = x, y
                 dx = x - self.prev_index_x
                 dy = y - self.prev_index_y
-                shape = self.dropped_shapes[self.selected_shape_index]
+                shape, color = self.dropped_shapes[self.selected_shape_index]
                 if isinstance(shape, tuple):
                     cx, cy, r = shape
-                    self.dropped_shapes[self.selected_shape_index] = (cx + dx, cy + dy, r)
+                    self.dropped_shapes[self.selected_shape_index] = ((cx + dx, cy + dy, r), color)
                 else:
-                    self.dropped_shapes[self.selected_shape_index] = [
-                        (px + dx, py + dy) for (px, py) in shape
-                    ]
+                    self.dropped_shapes[self.selected_shape_index] = ([(px + dx, py + dy) for (px, py) in shape], color)
                 self.prev_index_x, self.prev_index_y = x, y
             else:
                 # Try to select a shape under the finger
@@ -364,14 +358,14 @@ class DrawingApp:
                 # Calculate scaling ratio
                 scaling_ratio = current_distance / self.initial_scaling_distance
 
-                selected_shape = self.original_shape_for_scaling
+                selected_shape, color = self.original_shape_for_scaling
 
                 # Handle circles differently from polygons
                 if isinstance(selected_shape, tuple):
                     # For circles: (cx, cy, r)
                     cx, cy, original_radius = selected_shape
                     new_radius = int(original_radius * scaling_ratio)
-                    self.dropped_shapes[self.scaling_selected_shape_index] = (cx, cy, new_radius)
+                    self.dropped_shapes[self.scaling_selected_shape_index] = ((cx, cy, new_radius), color)
                 else:
                     # For polygons
                     pts = np.array(selected_shape)
@@ -382,7 +376,7 @@ class DrawingApp:
                         sx=scaling_ratio,
                         sy=scaling_ratio
                     )
-                    self.dropped_shapes[self.scaling_selected_shape_index] = scaled_shape
+                    self.dropped_shapes[self.scaling_selected_shape_index] = (scaled_shape, color)
         else:
             # Reset scaling state when gesture ends
             self.scaling_selected_shape_index = None
@@ -459,7 +453,7 @@ class DrawingApp:
                 dtheta_deg = np.degrees(dtheta)
                 sensitivity = 2  # Adjust sensitivity multiplier as needed
 
-                selected_shape = self.dropped_shapes[self.rot_selected_shape_index]
+                selected_shape, color = self.dropped_shapes[self.rot_selected_shape_index]
                 if isinstance(selected_shape, tuple):
                     return  # Skip circles for rotation
 
@@ -484,7 +478,7 @@ class DrawingApp:
                     rotated_shape[i] = (rotated_shape[i][0], -rotated_shape[i][1])
 
 
-                self.dropped_shapes[self.rot_selected_shape_index] = rotated_shape
+                self.dropped_shapes[self.rot_selected_shape_index] = (rotated_shape, color)
 
                 # Update previous angle for the next frame
                 self.prev_angle = angle
