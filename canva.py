@@ -6,6 +6,7 @@ from clipping import clip_polygon
 import math
 from transform import Transformation
 import copy
+
 class DrawingApp:
     def __init__(self):
         # Initialize Camera
@@ -15,7 +16,8 @@ class DrawingApp:
         self.cap.set(4, self.h)
 
         # Load Background Image
-        self.background_img = cv2.imread("image/image.png")
+        self.background_img_unchanged = cv2.imread("image/image.png")
+        self.background_img = copy.deepcopy(self.background_img_unchanged)
         if self.background_img is None:
             print("Error: Background image not loaded.")
             exit(1)
@@ -66,7 +68,8 @@ class DrawingApp:
         self.scaling_selected_shape_index = None
         self.initial_scaling_distance = None
         self.original_shape_for_scaling = None
-        self. scaling = False
+        self.scaling = False
+        self.brush_thickness = 4
 
         # Define button areas as (top-left, bottom-right)
         self.buttons = {
@@ -83,6 +86,8 @@ class DrawingApp:
             "yellow": [(495, 20), (575, 100)],
             "undo": [(865, 20), (950, 100)],
             "redo": [(1070, 20), (1150, 100)],
+            "thickness line" : [(1110, 330), (1110, 450)],
+            "thickness button" : [(1070,100 ), (1150, 180)]
         }
 
     # ---------------------- Main Loop ----------------------
@@ -97,6 +102,7 @@ class DrawingApp:
 
             # Define drawing area and background
             drawing_canvas = [(30, 150), (1030, 150), (1030, self.h - 50), (30, self.h - 50)]
+            self.background_img = copy.deepcopy( self.background_img_unchanged )
             background_resized = cv2.resize(self.background_img, (self.w, self.h))
             if self.canvas is None:
                 self.canvas = np.zeros_like(background_resized)
@@ -127,12 +133,12 @@ class DrawingApp:
                     self.handle_rotating(drawing_hand, helping_hand)
                 
                 if drawing_hand:
+                    self.control_line_thickness(img = background_resized, right_hand = drawing_hand, left_hand = helping_hand)
                     self.process_hand_buttons(drawing_hand)
                     self.handle_dragging(drawing_hand)
 
 
-
-                
+            
                 
                 
                     
@@ -144,7 +150,7 @@ class DrawingApp:
 
             if cv2.waitKey(1) == ord('q'):
                 break
-
+        
         self.cap.release()
         cv2.destroyAllWindows()
 
@@ -166,6 +172,33 @@ class DrawingApp:
             if flag:
                 return self.color_map[color]
         return self.color_map["red"]
+
+
+    def control_line_thickness(self, img, right_hand, left_hand):
+        px, py = right_hand["lmList"][8][:2]
+        rect = self.buttons["thickness button"]
+
+        if self.is_index_up(right_hand) and self.point_in_rect(rect=rect, x=px, y=py):
+            # If left hand is available and shows the proper gesture, update thickness first.
+            if left_hand and self.is_index_and_thump_up(left_hand):
+                index_tip = np.array(left_hand["lmList"][8][:2])
+                thumb_tip = np.array(left_hand["lmList"][4][:2])
+                current_distance = np.linalg.norm(index_tip - thumb_tip)
+                # For normalization, using a distance between two other landmarks:
+                point2 = np.array(left_hand["lmList"][9][:2])
+                point1 = np.array(left_hand["lmList"][0][:2])
+                current_distance_norm = current_distance / np.linalg.norm(point1 - point2)
+                self.brush_thickness = np.interp(current_distance_norm, [0.14, 1.587], [1, 20])
+            
+            # Now draw the UI indicator on the image that will be rendered.
+            line = self.buttons["thickness line"]
+            self.draw_shapes.line(img=img, point1=line[0], point2=line[1], color=(255, 0, 255), thickness=3)
+            tool_position = np.interp(self.brush_thickness, [1, 20], [line[1][1], line[0][1]])
+            cv2.circle(img=img, center=(line[0][0], int(tool_position)), radius=5, color=(255, 0, 255))
+
+            
+        
+
 
     def render_canvas(self, background, drawing_canvas):
         combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
@@ -232,7 +265,7 @@ class DrawingApp:
         elif self.brush_button_clicked and self.is_index_up(hand) and self.check_hand_inside_canvas(x, y):
             if self.prev_x is None or self.prev_y is None:
                 self.prev_x, self.prev_y = x, y
-            cv2.line(self.canvas, (self.prev_x, self.prev_y), (x, y), self.get_color(), 5)
+            self.draw_shapes.line(self.canvas, (self.prev_x, self.prev_y), (x, y), color=self.get_color(), thickness= self.brush_thickness)
             self.prev_x, self.prev_y = x, y
         else:
             self.prev_x, self.prev_y = None, None
