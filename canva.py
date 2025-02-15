@@ -20,6 +20,10 @@ class DrawingApp:
         self.selected_vertex_shape = None  # Track which shape the selected vertex belongs to
         
         
+        self.edge_selection_radius = 10
+        self.selected_edge = None  # Will store (shape_index, start_idx, end_idx)
+        self.edge_drag_start = None
+            
         # Load Background Image
         self.background_img = cv2.imread("image/image.png")
         if self.background_img is None:
@@ -103,6 +107,120 @@ class DrawingApp:
                     print(f"Vertex {vertex_idx} of shape {shape_idx} selected")
                     return shape_idx, vertex_idx
         return None, None
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    def select_edge_at(self, x, y):
+        """Check if point is near an edge and return (shape_idx, start_idx, end_idx)."""
+        for shape_idx, shape in enumerate(self.dropped_shapes):
+            if isinstance(shape, tuple):  # Skip circles
+                continue
+            
+            for i in range(len(shape)):
+                start = shape[i]
+                end = shape[(i + 1) % len(shape)]
+                
+                # Calculate distance from point to line segment
+                dist = self.point_to_line_distance(x, y, start, end)
+                if dist < self.edge_selection_radius:
+                    return shape_idx, i, (i + 1) % len(shape)
+        return None
+
+# Add helper method for distance calculation
+    def point_to_line_distance(self, x, y, start, end):
+        """Calculate distance from point to line segment."""
+        x1, y1 = start
+        x2, y2 = end
+        
+        # Calculate squared length of line segment
+        line_length_sq = (x2 - x1)**2 + (y2 - y1)**2
+        if line_length_sq == 0:
+            return math.sqrt((x - x1)**2 + (y - y1)**2)
+        
+        # Calculate projection point
+        t = max(0, min(1, ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / line_length_sq))
+        proj_x = x1 + t * (x2 - x1)
+        proj_y = y1 + t * (y2 - y1)
+        
+        return math.sqrt((x - proj_x)**2 + (y - proj_y)**2)
+
+# Add new method for edge extension
+    def handle_edge_extension(self, hand):
+        """Handle edge extension while preventing overlap with dragging."""
+        # Skip if rotation, scaling or dragging is active
+        if self.rotation or self.scaling or self.selected_shape_index is not None:
+            return
+
+        lm_list = hand["lmList"]
+        x, y = lm_list[8][:2]
+
+        if self.is_index_up(hand):
+            if self.selected_edge is None:
+                edge_info = self.select_edge_at(x, y)
+                if edge_info:
+                    self.selected_edge = edge_info
+                    self.edge_drag_start = (x, y)
+            else:
+                if self.check_hand_inside_canvas(x, y):
+                    shape_idx, start_idx, end_idx = self.selected_edge
+                    shape = list(self.dropped_shapes[shape_idx])
+                    
+                    # Get the selected edge vertices
+                    start = shape[start_idx]
+                    end = shape[end_idx]
+                    
+                    # Determine if this is a vertical or horizontal edge
+                    is_vertical = abs(end[0] - start[0]) < 10
+                    
+                    if is_vertical:
+                        # For vertical edges, only move the x-coordinate
+                        target_x = x
+                        # Find all vertices with same x-coordinate
+                        ref_x = start[0]
+                        for i in range(len(shape)):
+                            if abs(shape[i][0] - ref_x) < 10:
+                                shape[i] = (target_x, shape[i][1])
+                    else:
+                        # For horizontal edges, only move the y-coordinate
+                        target_y = y
+                        # Find all vertices with same y-coordinate
+                        ref_y = start[1]
+                        for i in range(len(shape)):
+                            if abs(shape[i][1] - ref_y) < 10:
+                                shape[i] = (shape[i][0], target_y)
+                    
+                    self.dropped_shapes[shape_idx] = shape
+        else:
+            self.selected_edge = None
+            self.edge_drag_start = None
+        
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     
     def handle_vertex_dragging(self, hand):
@@ -218,9 +336,8 @@ class DrawingApp:
                 # Handle single-hand gestures
                 if drawing_hand:
                     if not self.process_hand_buttons(drawing_hand):
-                        self.handle_vertex_dragging(drawing_hand)  # Try vertex dragging first
-                        # self.handle_dragging(drawing_hand)
-                        if self.selected_vertex_shape is None:
+                        self.handle_edge_extension(drawing_hand)  # Try edge extension first
+                        if self.selected_edge is None:  # Only try dragging if no edge is selected
                             self.handle_dragging(drawing_hand)
                         
                     # self.process_hand_buttons(drawing_hand)
@@ -293,6 +410,67 @@ class DrawingApp:
         return (x - cx) ** 2 + (y - cy) ** 2 <= r ** 2
 
     # ---------------------- Generic Tool Handlers ----------------------
+    def handle_dragging(self, hand):
+        """Handle shape dragging."""
+        # Skip if rotation or edge extension is active
+        if self.rotation or self.selected_edge is not None:
+            return
+        
+        lm_list = hand["lmList"]
+        x, y = lm_list[8][:2]
+
+        if self.is_index_up(hand):
+            if self.selected_shape_index is not None:
+                # Initialize previous position if not set
+                if self.prev_index_x is None or self.prev_index_y is None:
+                    self.prev_index_x, self.prev_index_y = x, y
+                    return
+                
+                # Calculate movement
+                dx = x - self.prev_index_x
+                dy = y - self.prev_index_y
+                
+                # Update shape position
+                shape = self.dropped_shapes[self.selected_shape_index]
+                
+                if isinstance(shape, tuple):
+                    # Handle circle dragging
+                    cx, cy, r = shape
+                    new_cx = cx + dx
+                    new_cy = cy + dy
+                    # Check if new position is within canvas
+                    if self.check_hand_inside_canvas(new_cx, new_cy):
+                        self.dropped_shapes[self.selected_shape_index] = (new_cx, new_cy, r)
+                else:
+                    # Handle polygon dragging
+                    new_shape = []
+                    can_move = True
+                    # Check if all vertices will be within canvas after moving
+                    for px, py in shape:
+                        new_x = px + dx
+                        new_y = py + dy
+                        if not self.check_hand_inside_canvas(new_x, new_y):
+                            can_move = False
+                            break
+                        new_shape.append((new_x, new_y))
+                    
+                    if can_move:
+                        self.dropped_shapes[self.selected_shape_index] = new_shape
+                
+                # Update previous position
+                self.prev_index_x, self.prev_index_y = x, y
+                
+            else:
+                # Try to select a shape under the finger
+                self.selected_shape_index = self.select_shape_at(x, y)
+                if self.selected_shape_index is not None:
+                    self.prev_index_x, self.prev_index_y = x, y
+        else:
+            # Reset selection when gesture ends
+            self.selected_shape_index = None
+            self.prev_index_x, self.prev_index_y = None, None
+        
+    
     def handle_shape_button(self, tool, drop_func, x, y, hand):
         """Generic handler for shape buttons (square, rectangle, etc.)."""
         rect = self.buttons[tool]
@@ -419,56 +597,54 @@ class DrawingApp:
         self.handle_color_button("yellow", x, y, hand)
 
     # ---------------------- Dragging & Reshaping ----------------------
-    def handle_dragging(self, hand):
-        """Handle shape dragging with state saving."""
-        # Skip if rotation is active
-        if self.rotation or self.selected_vertex_shape is not None:
+    def handle_edge_extension(self, hand):
+        """Handle edge extension while preventing overlap with dragging."""
+        # Skip if rotation, scaling or dragging is active
+        if self.rotation or self.scaling or self.selected_shape_index is not None:
             return
-        
+
         lm_list = hand["lmList"]
         x, y = lm_list[8][:2]
 
         if self.is_index_up(hand):
-            if self.selected_shape_index is not None:
-                # Initialize previous position if not set
-                if self.prev_index_x is None or self.prev_index_y is None:
-                    self.prev_index_x, self.prev_index_y = x, y
-                    return
-                
-                # Calculate movement
-                dx = x - self.prev_index_x
-                dy = y - self.prev_index_y
-                
-                # Update shape position
-                shape = self.dropped_shapes[self.selected_shape_index]
-                shape_moved = False
-                
-                if isinstance(shape, tuple):
-                    # Handle circle dragging
-                    cx, cy, r = shape
-                    self.dropped_shapes[self.selected_shape_index] = (cx + dx, cy + dy, r)
-                    shape_moved = True
-                else:
-                    # Handle polygon dragging
-                    self.dropped_shapes[self.selected_shape_index] = [
-                        (px + dx, py + dy) for (px, py) in shape
-                    ]
-                    shape_moved = True
-                
-                # Update previous position
-                self.prev_index_x, self.prev_index_y = x, y
-                
-                # Save state if shape was moved
-                
+            if self.selected_edge is None:
+                edge_info = self.select_edge_at(x, y)
+                if edge_info:
+                    self.selected_edge = edge_info
+                    self.edge_drag_start = (x, y)
             else:
-                # Try to select a shape under the finger
-                self.selected_shape_index = self.select_shape_at(x, y)
-                if self.selected_shape_index is not None:
-                    self.prev_index_x, self.prev_index_y = x, y
+                if self.check_hand_inside_canvas(x, y):
+                    shape_idx, start_idx, end_idx = self.selected_edge
+                    shape = list(self.dropped_shapes[shape_idx])
+                    
+                    # Get the selected edge vertices
+                    start = shape[start_idx]
+                    end = shape[end_idx]
+                    
+                    # Determine if this is a vertical or horizontal edge
+                    is_vertical = abs(end[0] - start[0]) < 10
+                    
+                    if is_vertical:
+                        # For vertical edges, only move the x-coordinate
+                        target_x = x
+                        # Find all vertices with same x-coordinate
+                        ref_x = start[0]
+                        for i in range(len(shape)):
+                            if abs(shape[i][0] - ref_x) < 10:
+                                shape[i] = (target_x, shape[i][1])
+                    else:
+                        # For horizontal edges, only move the y-coordinate
+                        target_y = y
+                        # Find all vertices with same y-coordinate
+                        ref_y = start[1]
+                        for i in range(len(shape)):
+                            if abs(shape[i][1] - ref_y) < 10:
+                                shape[i] = (shape[i][0], target_y)
+                    
+                    self.dropped_shapes[shape_idx] = shape
         else:
-            # Reset selection when gesture ends
-            self.selected_shape_index = None
-            self.prev_index_x, self.prev_index_y = None, None
+            self.selected_edge = None
+            self.edge_drag_start = None
     
     def is_index_and_thump_up(self,hand):
         fingers = self.detector.fingersUp(hand)
