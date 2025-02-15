@@ -21,6 +21,9 @@ class DrawingApp:
         self.selected_vertex_shape = None  # Track which shape the selected vertex belongs to
         
         
+        self.shape_colors = {}  # Dictionary to store shape colors
+        self.currently_filling = False # Flag to track if filling is in progress    
+        
         self.edge_selection_radius = 10
         self.selected_edge = None  # Will store (shape_index, start_idx, end_idx)
         self.edge_drag_start = None
@@ -119,9 +122,19 @@ class DrawingApp:
     
     
     
-    
-    
-    
+    def fill_shape(self, x, y, hand):
+        """Handle shape filling with selected color."""
+        if self.is_index_up(hand):
+            shape_idx = self.select_shape_at(x, y)
+            if shape_idx is not None:
+                current_color = self.get_color()
+                # Update or add color for the shape
+                self.shape_colors[shape_idx] = current_color
+                print(f"Shape {shape_idx} filled with color {current_color}")
+                return True
+        return False
+            
+        
     
     
     
@@ -424,17 +437,28 @@ class DrawingApp:
 
     def render_canvas(self, background, drawing_canvas):
         combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
-        for shape in self.dropped_shapes:
+        
+        for idx, shape in enumerate(self.dropped_shapes):
             if shape:
                 if isinstance(shape, tuple):
-                    # Handle circle drawing
+                    # Draw circle
                     cx, cy, r = shape
-                    cv2.circle(combined, (int(cx), int(cy)), int(r), (0, 0, 255), 2)
+                    # Draw fill only if color was explicitly set
+                    if idx in self.shape_colors:
+                        cv2.circle(combined, (int(cx), int(cy)), int(r), self.shape_colors[idx], -1)
+                    # Always draw outline
+                    cv2.circle(combined, (int(cx), int(cy)), int(r), (0, 0, 255), 1)
                 else:
                     # Handle polygon shapes
                     clipped = clip_polygon(shape, drawing_canvas)
                     if clipped:
+                        # Draw fill only if color was explicitly set
+                        if idx in self.shape_colors:
+                            pts = np.array(clipped, np.int32)
+                            cv2.fillPoly(combined, [pts], self.shape_colors[idx])
+                        # Always draw outline
                         self.draw_shapes.polygon(combined, points=clipped, color=(0, 0, 255))
+        
         return combined
 
     def select_shape_at(self, x, y):
@@ -528,14 +552,19 @@ class DrawingApp:
                 self.shape_flags[tool] = True
                 self.brush_button_clicked = False
                 self.eraser_button_clicked = False
+                # Reset any color selection when selecting a shape tool
+                for color in self.color_flags:
+                    self.color_flags[color] = False
                 print(f"{tool.capitalize()} Button Clicked")
                 
         # Handle shape dropping
         elif self.shape_flags.get(tool, False) and self.is_index_up(hand):
             # Only drop shape if inside canvas area
             if self.check_hand_inside_canvas(x, y):
-                # Create and add the new shape
-                self.dropped_shapes.append(drop_func(x, y))
+                # Add new shape without any color association
+                new_shape = drop_func(x, y)
+                self.dropped_shapes.append(new_shape)
+                # Reset shape flag
                 self.shape_flags[tool] = False
                 print(f"{tool.capitalize()} Dropped")
             else:
@@ -547,9 +576,11 @@ class DrawingApp:
         """Generic handler for color buttons."""
         rect = self.buttons[color]
         if self.point_in_rect(x, y, rect) and self.is_index_up(hand):
+            # Only set the selected color flag, don't auto-fill shapes
             for c in self.color_flags:
                 self.color_flags[c] = (c == color)
-            print(f"{color.capitalize()} Color Clicked")
+            print(f"{color.capitalize()} Color Selected")
+
 
     def handle_brush(self, x, y, hand):
         """Handle brush and eraser tools with state saving."""
@@ -603,11 +634,14 @@ class DrawingApp:
             self.prev_x, self.prev_y = None, None
 
     # ---------------------- Drop Functions for Shapes ----------------------
+    def drop_rectangle(self, x, y):
+    # Return shape without any color fill
+        return [(dx + x, dy + y) for dx, dy in self.initial_rectangle_coordinates]
+
     def drop_square(self, x, y):
+    # Return shape without any color fill
         return [(dx + x, dy + y) for dx, dy in self.initial_square_coordinates]
 
-    def drop_rectangle(self, x, y):
-        return [(dx + x, dy + y) for dx, dy in self.initial_rectangle_coordinates]
 
     def drop_triangle(self, x, y):
         triangle_size = 50
@@ -628,6 +662,12 @@ class DrawingApp:
         """Process all button interactions including undo/redo."""
         lm_list = hand["lmList"]
         x, y = lm_list[8][:2]
+        
+        if self.check_hand_inside_canvas(x, y):
+        # Only try to fill if a color is selected
+            if any(self.color_flags.values()):
+                if self.fill_shape(x, y, hand):
+                    return True
 
        
         # Process other buttons only if undo/redo wasn't triggered
