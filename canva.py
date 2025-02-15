@@ -13,6 +13,7 @@ class DrawingApp:
         self.w, self.h = 1280, 720
         self.cap.set(3, self.w)
         self.cap.set(4, self.h)
+        self.eraser_button_clicked = False
 
         # Load Background Image
         self.background_img = cv2.imread("image/image.png")
@@ -66,7 +67,7 @@ class DrawingApp:
         self.scaling_selected_shape_index = None
         self.initial_scaling_distance = None
         self.original_shape_for_scaling = None
-        self. scaling = False
+        self.scaling = False
 
         # Define button areas as (top-left, bottom-right)
         self.buttons = {
@@ -224,15 +225,34 @@ class DrawingApp:
             print(f"{color.capitalize()} Color Clicked")
 
     def handle_brush(self, x, y, hand):
-        rect = self.buttons["brush"]
-        if self.point_in_rect(x, y, rect):
+        """Handle brush and eraser tools."""
+        brush_rect = self.buttons["brush"]
+        eraser_rect = self.buttons["eraser"]
+        
+        # Check for brush button
+        if self.point_in_rect(x, y, brush_rect):
             if self.is_index_up(hand):
                 self.brush_button_clicked = True
+                self.eraser_button_clicked = False
                 print("Brush Button Clicked")
-        elif self.brush_button_clicked and self.is_index_up(hand) and self.check_hand_inside_canvas(x, y):
+        # Check for eraser button
+        elif self.point_in_rect(x, y, eraser_rect):
+            if self.is_index_up(hand):
+                self.eraser_button_clicked = True
+                self.brush_button_clicked = False
+                print("Eraser Button Clicked")
+        # Handle drawing/erasing
+        elif self.is_index_up(hand) and self.check_hand_inside_canvas(x, y):
             if self.prev_x is None or self.prev_y is None:
                 self.prev_x, self.prev_y = x, y
-            cv2.line(self.canvas, (self.prev_x, self.prev_y), (x, y), self.get_color(), 5)
+            
+            if self.brush_button_clicked:
+                # Draw with selected color
+                cv2.line(self.canvas, (self.prev_x, self.prev_y), (x, y), self.get_color(), 5)
+            elif self.eraser_button_clicked:
+                # Erase (draw with black color and thicker line)
+                cv2.line(self.canvas, (self.prev_x, self.prev_y), (x, y), (0, 0, 0), 20)
+            
             self.prev_x, self.prev_y = x, y
         else:
             self.prev_x, self.prev_y = None, None
