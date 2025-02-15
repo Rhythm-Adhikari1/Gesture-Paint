@@ -171,9 +171,15 @@ class DrawingApp:
         combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
         for shape in self.dropped_shapes:
             if shape:
-                clipped = clip_polygon(shape, drawing_canvas)
-                if clipped:
-                    self.draw_shapes.polygon(combined, points=clipped, color=(0, 255, 0))
+                if isinstance(shape, tuple):
+                    # Handle circle drawing
+                    cx, cy, r = shape
+                    cv2.circle(combined, (int(cx), int(cy)), int(r), (0, 0, 255), 2)
+                else:
+                    # Handle polygon shapes
+                    clipped = clip_polygon(shape, drawing_canvas)
+                    if clipped:
+                        self.draw_shapes.polygon(combined, points=clipped, color=(0, 0, 255))
         return combined
 
     def select_shape_at(self, x, y):
@@ -322,8 +328,7 @@ class DrawingApp:
   
 
     def handle_reshaping(self, right_hand, left_hand):
-        
-         # Check for the correct scaling gesture
+    # Check for the correct scaling gesture
         if self.is_index_up(right_hand) and self.is_index_and_thump_up(left_hand):
             l_lmList = left_hand["lmList"]
             r_lmList = right_hand["lmList"]
@@ -331,10 +336,9 @@ class DrawingApp:
             # Get the right-hand index tip coordinates
             px, py = r_lmList[8][:2]
 
-            # If no shape is currently selected for scaling, select one using the right-hand tip.
+            # If no shape is currently selected for scaling, select one using the right-hand tip
             if self.scaling_selected_shape_index is None:
                 self.scaling_selected_shape_index = self.select_shape_at(px, py)
-                # Reset the initial values for a new gesture.
                 self.initial_scaling_distance = None
                 self.original_shape_for_scaling = None
 
@@ -344,37 +348,37 @@ class DrawingApp:
                 thumb_tip = np.array(l_lmList[4][:2])
                 current_distance = np.linalg.norm(index_tip - thumb_tip)
 
-                # On the first frame of the gesture, store the initial distance and a deep copy of the current (rotated) shape.
+                # On the first frame of the gesture, store initial values
                 if self.initial_scaling_distance is None:
                     self.initial_scaling_distance = current_distance
                     self.original_shape_for_scaling = copy.deepcopy(
                         self.dropped_shapes[self.scaling_selected_shape_index]
                     )
 
-                # Calculate scaling ratio relative to the initial gesture distance.
+                # Calculate scaling ratio
                 scaling_ratio = current_distance / self.initial_scaling_distance
-                print(f"Current distance: {current_distance}, Scaling ratio: {scaling_ratio}")
 
-                # Use the stored original shape (which already includes any rotation)
                 selected_shape = self.original_shape_for_scaling
 
-                # Compute the centroid of the shape to use as pivot
-                pts = np.array(selected_shape)
-                pivx, pivy = np.mean(pts, axis=0)
-
-                # Scale the shape with respect to the pivot.
-                # IMPORTANT: Ensure your transformation.scale function implements:
-                #   new_point = pivot + scaling_ratio * (point - pivot)
-                scaled_shape = self.transformation.scale(
-                    points=selected_shape,
-                    pivot=(pivx, pivy),
-                    sx=scaling_ratio,
-                    sy=scaling_ratio
-                )
-                print("Shape scaled based on gesture.")
-                self.dropped_shapes[self.scaling_selected_shape_index] = scaled_shape
+                # Handle circles differently from polygons
+                if isinstance(selected_shape, tuple):
+                    # For circles: (cx, cy, r)
+                    cx, cy, original_radius = selected_shape
+                    new_radius = int(original_radius * scaling_ratio)
+                    self.dropped_shapes[self.scaling_selected_shape_index] = (cx, cy, new_radius)
+                else:
+                    # For polygons
+                    pts = np.array(selected_shape)
+                    pivx, pivy = np.mean(pts, axis=0)
+                    scaled_shape = self.transformation.scale(
+                        points=selected_shape,
+                        pivot=(pivx, pivy),
+                        sx=scaling_ratio,
+                        sy=scaling_ratio
+                    )
+                    self.dropped_shapes[self.scaling_selected_shape_index] = scaled_shape
         else:
-            # When the gesture is not active, reset scaling state.
+            # Reset scaling state when gesture ends
             self.scaling_selected_shape_index = None
             self.initial_scaling_distance = None
             self.original_shape_for_scaling = None

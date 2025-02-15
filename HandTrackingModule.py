@@ -139,7 +139,7 @@ class HandDetector:
         # For a right hand, if the thumb tip (landmark at self.tipIds[0]) is to the right of its preceding joint,
         # the thumb is open. Reverse the condition for a left hand.
         thumb_tip = rotated_points[self.tipIds[0]]
-        thumb_ip  = rotated_points[self.tipIds[0] - 3]
+        thumb_ip  = rotated_points[self.tipIds[0] - 1]
         if myHandType == "Right":
             fingers.append(1 if thumb_tip[0] < thumb_ip[0] else 0)
         else:
