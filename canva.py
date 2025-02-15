@@ -31,6 +31,7 @@ class DrawingApp:
         self.canvas = None
         self.dropped_shapes = []
         self.initial_square_coordinates = [(-50, -50), (50, -50), (50, 50), (-50, 50)]
+        self.initial_rectangle_coordinates = [(-70, -40), (70, -40), (70, 40), (-70, 40)]
 
         # Tool button states stored in dictionaries
         self.shape_flags = {
@@ -133,7 +134,7 @@ class DrawingApp:
                     self.handle_rotating(drawing_hand, helping_hand)
                 
                 if drawing_hand:
-                    self.control_line_thickness(img = background_resized, right_hand = drawing_hand, left_hand = helping_hand)
+                    self.control_line_thickness(img = background_resized, right_hand = drawing_hand, left_hand= helping_hand)
                     self.process_hand_buttons(drawing_hand)
                     self.handle_dragging(drawing_hand)
 
@@ -275,7 +276,7 @@ class DrawingApp:
         return [(dx + x, dy + y) for dx, dy in self.initial_square_coordinates]
 
     def drop_rectangle(self, x, y):
-        return [(dx + x, dy + y) for dx, dy in self.initial_square_coordinates]
+        return [(dx + x, dy + y) for dx, dy in self.initial_rectangle_coordinates]
 
     def drop_triangle(self, x, y):
         triangle_size = 50
