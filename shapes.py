@@ -1,4 +1,5 @@
 import  numpy as np
+import cv2
 
 
 class Draw:
@@ -6,8 +7,7 @@ class Draw:
     def __init__(self):
         pass
 
-    def line(self, img, point1, point2, color):
-        
+    def line(self, img, point1, point2, color, thickness=1):
         x1, y1 = map(int, point1)  # Ensure integer values
         x2, y2 = map(int, point2)
 
@@ -18,9 +18,17 @@ class Draw:
         err = dx - dy  
         
         while True:
-            img[y1, x1] = color 
+            # Draw the pixel (or a small circle for thickness > 1)
+            if thickness == 1:
+                img[y1, x1] = color 
+            else:
+                # Draw a filled circle with radius thickness//2
+                cv2.circle(img, (x1, y1), int(thickness // 2), color, -1)
+            
+            # Check if reached the end point
             if x1 == x2 and y1 == y2:  
                 break
+            
             e2 = 2 * err
             if e2 > -dy:
                 err -= dy
