@@ -5,6 +5,7 @@ from shapes import Draw
 from clipping import clip_polygon
 import math
 from transform import Transformation
+from fill import Fill
 import copy
 class DrawingApp:
     def __init__(self):
@@ -66,7 +67,10 @@ class DrawingApp:
         self.scaling_selected_shape_index = None
         self.initial_scaling_distance = None
         self.original_shape_for_scaling = None
-        self. scaling = False
+        self.scaling = False
+        self.fill_selected_shape_index = None
+        self.filling = False
+        self.original_shape_for_filling = None
 
         # Define button areas as (top-left, bottom-right)
         self.buttons = {
@@ -125,10 +129,12 @@ class DrawingApp:
                 if drawing_hand and helping_hand:
                     self.handle_reshaping(drawing_hand, helping_hand)
                     self.handle_rotating(drawing_hand, helping_hand)
+                    self.handle_fill(drawing_hand, helping_hand)
                 
                 if drawing_hand:
                     self.process_hand_buttons(drawing_hand)
                     self.handle_dragging(drawing_hand)
+                
 
 
 
@@ -325,7 +331,7 @@ class DrawingApp:
         return fingers[0] == 1 and fingers[1] == 1 and fingers[2] == 0 and fingers[3] == 0 and fingers[4] ==0
 
 
-  
+    
 
     def handle_reshaping(self, right_hand, left_hand):
     # Check for the correct scaling gesture
@@ -383,6 +389,34 @@ class DrawingApp:
             self.initial_scaling_distance = None
             self.original_shape_for_scaling = None
             self.scaling = False
+
+    def handle_fill(self, right_hand, left_hand):
+
+    # Check for the correct filling gesture
+        if self.is_index_up(right_hand) and self.index_and_middle_up(left_hand):
+            l_lmList = left_hand["lmList"]
+            r_lmList = right_hand["lmList"] 
+
+            # Get the right-hand index tip coordinates
+            px, py = r_lmList[8][:2]
+
+            # If no shape is currently selected for scaling, select one using the right-hand tip
+            if self.fill_selected_shape_index is None:
+                self.fill_selected_shape_index = self.select_shape_at(px, py)
+                
+
+            if self.fill_selected_shape_index is not None:
+                self.original_shape_for_filling = copy.deepcopy(
+                        self.dropped_shapes[self.fill_selected_shape_index]
+                    )
+                Fill.scanline_fill(self, self.original_shape_for_filling, self.get_color())
+
+               
+        else:
+            # Reset fill state when gesture ends
+            self.fill_selected_shape_index = None
+            self.filling = False
+            self.original_shape_for_filling = None
 
 
     def is_hand_closed(self, hand):
