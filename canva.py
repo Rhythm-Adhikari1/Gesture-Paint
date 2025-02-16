@@ -20,7 +20,6 @@ class DrawingApp:
         self.selected_vertex_index = None  # Track which vertex is selected
         self.selected_vertex_shape = None  # Track which shape the selected vertex belongs to
         
-        
         self.shape_colors = {}  # Dictionary to store shape colors
         self.currently_filling = False # Flag to track if filling is in progress    
         
@@ -45,6 +44,11 @@ class DrawingApp:
         self.dropped_shapes = []
         self.initial_square_coordinates = [(-50, -50), (50, -50), (50, 50), (-50, 50)]
         self.initial_rectangle_coordinates = [(-70, -40), (70, -40), (70, 40), (-70, 40)]
+        self.undo_in_process = False
+        self.redo_in_process = False
+        self.shape_filling = False
+        self.edge_extension_running = False
+        self.vertex_dragging_running = False
 
         # Tool button states stored in dictionaries
         self.shape_flags = {
@@ -72,10 +76,13 @@ class DrawingApp:
 
         # Variables for brush drawing
         self.prev_x, self.prev_y = None, None
+        self.brush_drawing = False               # **NEW: flag to detect brush stroke action
 
         # Variables for dragging/resizing shapes
         self.selected_shape_index = None
         self.prev_index_x, self.prev_index_y = None, None
+        self.dragging_active = False             # **NEW: flag for dragging action
+
         self.prev_angle = None
         self.rotation = False
         self.rot_selected_shape_index = None
@@ -83,6 +90,8 @@ class DrawingApp:
         self.initial_scaling_distance = None
         self.original_shape_for_scaling = None
         self.scaling = False
+        self.scaling_active = False               # **NEW: flag for scaling action
+        self.rotating_active = False              # **NEW: flag for rotation action
 
         self.brush_thickness = 4
 
@@ -99,12 +108,93 @@ class DrawingApp:
             "blue": [(325, 20), (495, 100)],
             "green": [(380, 20), (485, 100)],
             "yellow": [(495, 20), (575, 100)],
-            "undo": [(1070, 20), (1150, 100)],
-            "redo": [(1230, 20), (1310, 100)],
+            "undo": [(1070, 20), (1150, 100)],      # **UNDO button area
+            "redo": [(1150, 20), (1230, 100)],     # **REDO button area
             "thickness line" : [(1110, 330), (1110, 450)],
             "thickness button" : [(1070,100 ), (1150, 180)]
         }
-    
+        
+        # **NEW: Initialize undo and redo stacks.
+        self.undo_stack = []
+        self.redo_stack = []
+
+    # **NEW: Method to record the current drawing state.
+    def record_state(self):
+        state = {
+            'canvas': self.canvas.copy(),
+            'dropped_shapes': copy.deepcopy(self.dropped_shapes),
+            'shape_colors': copy.deepcopy(self.shape_colors)
+        }
+
+        
+        self.undo_stack.append(state)
+        self.redo_stack.clear()
+        print("State recorded. Undo stack size:", len(self.undo_stack))
+
+    # **NEW: Undo method.
+    def undo(self, hand):
+        """Perform undo if the hand is within the undo button area and gesture is valid."""
+
+        lm_list = hand["lmList"]
+        x, y = lm_list[8][:2]
+        
+        if self.undo_in_process :
+            if self.point_in_rect(x, y, self.buttons["undo"]) and self.is_index_up(hand):
+                return
+
+       
+        if self.point_in_rect(x, y, self.buttons["undo"]) and self.is_index_up(hand):
+            self.undo_in_process = True
+            if not self.undo_stack:
+                print("Nothing to undo")
+                return   # Return True so that the main loop can delay.
+            # Save current state into redo stack.
+            current_state = {
+                'canvas': self.canvas.copy(),
+                'dropped_shapes': copy.deepcopy(self.dropped_shapes),
+                'shape_colors': copy.deepcopy(self.shape_colors)
+            }
+            self.redo_stack.append(current_state)
+            state = self.undo_stack.pop()
+            self.canvas = state['canvas'].copy()
+            self.dropped_shapes = copy.deepcopy(state['dropped_shapes'])
+            self.shape_colors = copy.deepcopy(state['shape_colors'])
+            print("Undo performed. Undo stack size:", len(self.undo_stack))
+            
+        else:
+            self.undo_in_process = False
+
+    def redo(self, hand):
+        """Perform redo if the hand is within the redo button area and gesture is valid."""
+        lm_list = hand["lmList"]
+        x, y = lm_list[8][:2]
+
+        if self.redo_in_process :
+            if self.point_in_rect(x, y, self.buttons["redo"]) and self.is_index_up(hand):
+                return     
+
+
+        if self.point_in_rect(x, y, self.buttons["redo"]) and self.is_index_up(hand):
+            self.redo_in_process = True
+            if not self.redo_stack:
+                print("Nothing to redo")
+                return 
+            current_state = {
+                'canvas': self.canvas.copy(),
+                'dropped_shapes': copy.deepcopy(self.dropped_shapes),
+                'shape_colors': copy.deepcopy(self.shape_colors)
+            }
+            self.undo_stack.append(current_state)
+            state = self.redo_stack.pop()
+            self.canvas = state['canvas'].copy()
+            self.dropped_shapes = copy.deepcopy(state['dropped_shapes'])
+            self.shape_colors = copy.deepcopy(state['shape_colors'])
+            print("Redo performed. Redo stack size:", len(self.redo_stack))
+        
+        else:
+            self.redo_in_process = False
+        
+
     def select_vertex_at(self, x, y):
         """Check if a vertex is clicked and return (shape_index, vertex_index)."""
         for shape_idx, shape in enumerate(self.dropped_shapes):
@@ -118,28 +208,24 @@ class DrawingApp:
                     return shape_idx, vertex_idx
         return None, None
     
-    
-    
-    
-    
     def fill_shape(self, x, y, hand):
         """Handle shape filling with selected color."""
         if self.is_index_up(hand):
             shape_idx = self.select_shape_at(x, y)
             if shape_idx is not None:
+                if not self.shape_filling: 
+                    self.record_state()
                 current_color = self.get_color()
                 # Update or add color for the shape
                 self.shape_colors[shape_idx] = current_color
                 print(f"Shape {shape_idx} filled with color {current_color}")
+                #self.record_state()  # **Record state after filling.
+                self.shape_filling = True
                 return True
+            
+        self.shape_filling = False
         return False
             
-        
-    
-    
-    
-    
-    
     def select_edge_at(self, x, y):
         """Check if point is near an edge and return (shape_idx, start_idx, end_idx)."""
         for shape_idx, shape in enumerate(self.dropped_shapes):
@@ -156,7 +242,6 @@ class DrawingApp:
                     return shape_idx, i, (i + 1) % len(shape)
         return None
 
-# Add helper method for distance calculation
     def point_to_line_distance(self, x, y, start, end):
         """Calculate distance from point to line segment."""
         x1, y1 = start
@@ -174,7 +259,6 @@ class DrawingApp:
         
         return math.sqrt((x - proj_x)**2 + (y - proj_y)**2)
 
-# Add new method for edge extension
     def handle_edge_extension(self, hand):
         """Handle edge extension while preventing overlap with dragging."""
         # Skip if rotation, scaling or dragging is active
@@ -192,6 +276,10 @@ class DrawingApp:
                     self.edge_drag_start = (x, y)
             else:
                 if self.check_hand_inside_canvas(x, y):
+
+                    if not self.edge_extension_running:
+                        self.record_state()
+
                     shape_idx, start_idx, end_idx = self.selected_edge
                     shape = list(self.dropped_shapes[shape_idx])
                     
@@ -219,30 +307,13 @@ class DrawingApp:
                             if abs(shape[i][1] - ref_y) < 10:
                                 shape[i] = (shape[i][0], target_y)
                     
+                    self.edge_extension_running = True                    
                     self.dropped_shapes[shape_idx] = shape
         else:
             self.selected_edge = None
             self.edge_drag_start = None
+            self.edge_extension_running = False
         
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     def handle_vertex_dragging(self, hand):
         """Handle vertex dragging for true geometric shearing while preserving parallelism."""
         if self.rotation or self.scaling:
@@ -258,6 +329,10 @@ class DrawingApp:
                     self.selected_vertex_shape = shape_idx
                     self.selected_vertex_index = vertex_idx
             else:
+
+                if not self.vertex_dragging_running:
+                    self.record_state() 
+
                 shape = self.dropped_shapes[self.selected_vertex_shape]
                 if not isinstance(shape, tuple) and self.check_hand_inside_canvas(x, y):
                     shape_list = list(shape)
@@ -307,12 +382,12 @@ class DrawingApp:
                                 shape_list[i] = (px, new_y)
                     
                     self.dropped_shapes[self.selected_vertex_shape] = shape_list
+                    self.vertex_dragging_running = True
         else:
+            self.vertex_dragging_running = False
             self.selected_vertex_shape = None
             self.selected_vertex_index = None
             
-            
-    # ---------------------- Main Loop ----------------------
     def run(self):
         """Main loop for the application."""
         while self.cap.isOpened():
@@ -325,12 +400,14 @@ class DrawingApp:
 
             # Define drawing area and background
             drawing_canvas = [(30, 150), (1030, 150), (1030, self.h - 50), (30, self.h - 50)]
-            self.background_img = copy.deepcopy( self.background_img_unchanged )
+            self.background_img = copy.deepcopy(self.background_img_unchanged)
             background_resized = cv2.resize(self.background_img, (self.w, self.h))
             
             # Initialize canvas and save initial state
             if self.canvas is None:
                 self.canvas = np.zeros_like(background_resized)
+                # Record the initial (empty) state.
+                self.record_state()
 
             # Detect hands
             hands, frame = self.detector.findHands(frame, img_to_draw=background_resized)
@@ -356,24 +433,23 @@ class DrawingApp:
                 
                 # Handle single-hand gestures
                 if drawing_hand:
+                    self.control_line_thickness(img=background_resized, right_hand=drawing_hand, left_hand=helping_hand)
+                    # **NEW: Process undo/redo first.
+                    lm_list = drawing_hand["lmList"]
+                    x, y = lm_list[8][:2]
 
-                    self.control_line_thickness(img = background_resized, right_hand = drawing_hand, left_hand= helping_hand)
+                    self.undo(drawing_hand)
+                    self.redo(drawing_hand)
+                       
+
                     self.process_hand_buttons(drawing_hand)
                     self.handle_dragging(drawing_hand)
-
-
-            
-                
-                
-
+                    
+                    # If not processing a button, allow edge extension (or dragging if no edge is selected)
                     if not self.process_hand_buttons(drawing_hand):
-                        self.handle_edge_extension(drawing_hand)  # Try edge extension first
-                        if self.selected_edge is None:  # Only try dragging if no edge is selected
+                        self.handle_edge_extension(drawing_hand)
+                        if self.selected_edge is None:
                             self.handle_dragging(drawing_hand)
-                        
-                    # self.process_hand_buttons(drawing_hand)
-                    # self.handle_dragging(drawing_hand)
-
 
             # Merge canvas and render shapes
             combined = self.render_canvas(background_resized, drawing_canvas)
@@ -385,11 +461,9 @@ class DrawingApp:
                 break
 
         # Cleanup
-
         self.cap.release()
         cv2.destroyAllWindows()
 
-    # ---------------------- Helper Methods ----------------------
     def point_in_rect(self, x, y, rect):
         (x1, y1), (x2, y2) = rect
         return x1 < x < x2 and y1 < y < y2
@@ -407,7 +481,6 @@ class DrawingApp:
             if flag:
                 return self.color_map[color]
         return self.color_map["red"]
-
 
     def control_line_thickness(self, img, right_hand, left_hand):
         px, py = right_hand["lmList"][8][:2]
@@ -430,10 +503,6 @@ class DrawingApp:
             self.draw_shapes.line(img=img, point1=line[0], point2=line[1], color=(255, 0, 255), thickness=3)
             tool_position = np.interp(self.brush_thickness, [1, 20], [line[1][1], line[0][1]])
             cv2.circle(img=img, center=(line[0][0], int(tool_position)), radius=5, color=(255, 0, 255))
-
-            
-        
-
 
     def render_canvas(self, background, drawing_canvas):
         combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
@@ -492,11 +561,17 @@ class DrawingApp:
 
         if self.is_index_up(hand):
             if self.selected_shape_index is not None:
+
+                if not self.dragging_active:
+                    self.record_state()  # **Record state after dragging finishes.
+                    
+
                 # Initialize previous position if not set
                 if self.prev_index_x is None or self.prev_index_y is None:
                     self.prev_index_x, self.prev_index_y = x, y
+                    self.dragging_active = True  # **Start dragging action
                     return
-                
+                self.dragging_active = True
                 # Calculate movement
                 dx = x - self.prev_index_x
                 dy = y - self.prev_index_y
@@ -536,12 +611,16 @@ class DrawingApp:
                 self.selected_shape_index = self.select_shape_at(x, y)
                 if self.selected_shape_index is not None:
                     self.prev_index_x, self.prev_index_y = x, y
+                self.dragging_active = False
         else:
+            # if self.dragging_active:
+            #     self.record_state()  # **Record state after dragging finishes.
+            #     self.dragging_active = False
             # Reset selection when gesture ends
+            self.dragging_active = False
             self.selected_shape_index = None
             self.prev_index_x, self.prev_index_y = None, None
         
-    
     def handle_shape_button(self, tool, drop_func, x, y, hand):
         """Generic handler for shape buttons (square, rectangle, etc.)."""
         rect = self.buttons[tool]
@@ -562,11 +641,13 @@ class DrawingApp:
             # Only drop shape if inside canvas area
             if self.check_hand_inside_canvas(x, y):
                 # Add new shape without any color association
+                self.record_state() # record before dropping a shape
                 new_shape = drop_func(x, y)
                 self.dropped_shapes.append(new_shape)
                 # Reset shape flag
                 self.shape_flags[tool] = False
                 print(f"{tool.capitalize()} Dropped")
+                #self.record_state()  # **Record state after dropping a shape.
             else:
                 # Reset shape flag if dropped outside canvas
                 self.shape_flags[tool] = False
@@ -580,7 +661,6 @@ class DrawingApp:
             for c in self.color_flags:
                 self.color_flags[c] = (c == color)
             print(f"{color.capitalize()} Color Selected")
-
 
     def handle_brush(self, x, y, hand):
         """Handle brush and eraser tools with state saving."""
@@ -605,13 +685,16 @@ class DrawingApp:
         elif (self.brush_button_clicked or self.eraser_button_clicked) and \
             self.is_index_up(hand) and self.check_hand_inside_canvas(x, y):
             
+            if not self.brush_drawing:
+                self.record_state()
+
             # Initialize previous position if not set
             if self.prev_x is None or self.prev_y is None:
                 self.prev_x, self.prev_y = x, y
+                self.brush_drawing = True  # **Start brush drawing action
 
-            self.draw_shapes.line(self.canvas, (self.prev_x, self.prev_y), (x, y), color=self.get_color(), thickness= self.brush_thickness)
+            self.draw_shapes.line(self.canvas, (self.prev_x, self.prev_y), (x, y), color=self.get_color(), thickness=self.brush_thickness)
 
-            
             # Draw line based on selected tool
             if self.brush_button_clicked:
                 cv2.line(self.canvas, 
@@ -627,21 +710,23 @@ class DrawingApp:
                         thickness=20)
             
             # Update previous position
-
             self.prev_x, self.prev_y = x, y
         else:
-            # Reset previous position when not drawing
+            # If drawing was in progress and now finished, record state.
+            # if self.brush_drawing:
+            #     self.record_state()
+            #     self.brush_drawing = False
+            self.brush_drawing = False
             self.prev_x, self.prev_y = None, None
 
     # ---------------------- Drop Functions for Shapes ----------------------
     def drop_rectangle(self, x, y):
-    # Return shape without any color fill
+        # Return shape without any color fill
         return [(dx + x, dy + y) for dx, dy in self.initial_rectangle_coordinates]
 
     def drop_square(self, x, y):
-    # Return shape without any color fill
+        # Return shape without any color fill
         return [(dx + x, dy + y) for dx, dy in self.initial_square_coordinates]
-
 
     def drop_triangle(self, x, y):
         triangle_size = 50
@@ -663,14 +748,13 @@ class DrawingApp:
         lm_list = hand["lmList"]
         x, y = lm_list[8][:2]
         
+        # Process fill if a color is selected
         if self.check_hand_inside_canvas(x, y):
-        # Only try to fill if a color is selected
             if any(self.color_flags.values()):
                 if self.fill_shape(x, y, hand):
                     return True
 
-       
-        # Process other buttons only if undo/redo wasn't triggered
+        # Process shape buttons
         self.handle_shape_button("square", self.drop_square, x, y, hand)
         self.handle_shape_button("rectangle", self.drop_rectangle, x, y, hand)
         self.handle_shape_button("triangle", self.drop_triangle, x, y, hand)
@@ -685,8 +769,9 @@ class DrawingApp:
         self.handle_color_button("blue", x, y, hand)
         self.handle_color_button("green", x, y, hand)
         self.handle_color_button("yellow", x, y, hand)
+        
+        return False
 
-    # ---------------------- Dragging & Reshaping ----------------------
     def handle_edge_extension(self, hand):
         """Handle edge extension while preventing overlap with dragging."""
         # Skip if rotation, scaling or dragging is active
@@ -736,15 +821,12 @@ class DrawingApp:
             self.selected_edge = None
             self.edge_drag_start = None
     
-    def is_index_and_thump_up(self,hand):
+    def is_index_and_thump_up(self, hand):
         fingers = self.detector.fingersUp(hand)
-        return fingers[0] == 1 and fingers[1] == 1 and fingers[2] == 0 and fingers[3] == 0 and fingers[4] ==0
-
-
-  
+        return fingers[0] == 1 and fingers[1] == 1 and fingers[2] == 0 and fingers[3] == 0 and fingers[4] == 0
 
     def handle_reshaping(self, right_hand, left_hand):
-    # Check for the correct scaling gesture
+        # Check for the correct scaling gesture
         if self.is_index_up(right_hand) and self.is_index_and_thump_up(left_hand):
             l_lmList = left_hand["lmList"]
             r_lmList = right_hand["lmList"]
@@ -759,6 +841,10 @@ class DrawingApp:
                 self.original_shape_for_scaling = None
 
             if self.scaling_selected_shape_index is not None:
+
+                if not self.scaling_active:
+                    self.record_state()
+
                 # Compute the current distance between left-hand index and thumb tips
                 index_tip = np.array(l_lmList[8][:2])
                 thumb_tip = np.array(l_lmList[4][:2])
@@ -783,7 +869,6 @@ class DrawingApp:
                     new_radius = int(original_radius * scaling_ratio)
                     self.dropped_shapes[self.scaling_selected_shape_index] = (cx, cy, new_radius)
                 else:
-                    # For polygons
                     pts = np.array(selected_shape)
                     pivx, pivy = np.mean(pts, axis=0)
                     scaled_shape = self.transformation.scale(
@@ -793,13 +878,16 @@ class DrawingApp:
                         sy=scaling_ratio
                     )
                     self.dropped_shapes[self.scaling_selected_shape_index] = scaled_shape
+                self.scaling_active = True  # **Scaling in progress
         else:
-            # Reset scaling state when gesture ends
+            # if self.scaling_active:
+            #     self.record_state()  # **Record state after scaling completes.
+            #     self.scaling_active = False
+            self.scaling_active = False
             self.scaling_selected_shape_index = None
             self.initial_scaling_distance = None
             self.original_shape_for_scaling = None
             self.scaling = False
-
 
     def is_hand_closed(self, hand):
         fingers_up = self.detector.fingersUp(hand)
@@ -807,13 +895,10 @@ class DrawingApp:
     
     def index_and_middle_up(self, hand):
         fingers_up = self.detector.fingersUp(hand)
-        return fingers_up[0] == 0 and fingers_up[1] == 1 and fingers_up[2] == 1 and fingers_up[3] == 0 and fingers_up[4] ==0
-    
+        return fingers_up[0] == 0 and fingers_up[1] == 1 and fingers_up[2] == 1 and fingers_up[3] == 0 and fingers_up[4] == 0
     
     def handle_rotating(self, right_hand, left_hand):
-                
         if self.is_index_up(right_hand) and self.is_hand_closed(left_hand):
-
             l_lmList = left_hand["lmList"]
             r_lmList = right_hand["lmList"]
             print("Rotating gesture detected")
@@ -827,8 +912,11 @@ class DrawingApp:
           
             if self.rot_selected_shape_index is not None:
 
-                self.rotation = True
+                if not self.rotating_active:
+                    self.record_state()
 
+
+                self.rotation = True
                 print(f"Shape {self.rot_selected_shape_index} selected for rotating")
 
                 if self.prev_angle is None:
@@ -851,9 +939,9 @@ class DrawingApp:
 
                 # Compute the centroid of the shape (pivot remains constant)
                 pivx, pivy = 0, 0
-                for x, y in selected_shape:
-                    pivx += x
-                    pivy += y
+                for x_val, y_val in selected_shape:
+                    pivx += x_val
+                    pivy += y_val
                 pivx /= len(selected_shape)
                 pivy /= len(selected_shape)
 
@@ -861,32 +949,24 @@ class DrawingApp:
                 rotated_shape = self.transformation.rotate(selected_shape, (pivx, pivy), dtheta_deg * sensitivity)
 
                 # Update the shape with its rotated coordinates
-
                 for i in range(len(rotated_shape)):
                     rotated_shape[i] = (rotated_shape[i][0], -rotated_shape[i][1])
-
-
                 self.dropped_shapes[self.rot_selected_shape_index] = rotated_shape
-
-                # Update previous angle for the next frame
+                self.rotating_active = True  # **Rotation in progress
                 self.prev_angle = angle
-
-
             else:
                 self.rot_selected_shape_index = self.select_shape_at(px, py)
                 print("ROTATION SHAPE INDEX", self.rot_selected_shape_index)
                 if self.rot_selected_shape_index is not None:
                     self.prev_angle = angle
-
         else:
-            # Reset rotation state when the gesture is no longer active
+            # if self.rotating_active:
+            #     self.record_state()  # **Record state after rotation completes.
+            #     self.rotating_active = False
+            self.rotating_active = False
             self.rot_selected_shape_index = None
             self.prev_angle = None
         
-        
-
-
-
 if __name__ == '__main__':
     app = DrawingApp()
     app.run()
