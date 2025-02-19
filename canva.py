@@ -92,7 +92,10 @@ class DrawingApp:
         self.scaling = False
         self.scaling_active = False               # **NEW: flag for scaling action
         self.rotating_active = False              # **NEW: flag for rotation action
-
+        self.hover_shape_index = None               
+        self.hover_highlight_color = (0, 255, 0)
+        self.hover_thickness = 2
+        
         self.brush_thickness = 4
 
         # Define button areas as (top-left, bottom-right)
@@ -117,6 +120,21 @@ class DrawingApp:
         # **NEW: Initialize undo and redo stacks.
         self.undo_stack = []
         self.redo_stack = []
+        
+    def detect_hover(self, hand):
+        if hand is None:
+            self.hover_shape_index = None
+            return None
+        
+        fingers = self.detector.fingersUp(hand)
+        if fingers[0] == 1 and fingers[1] == 1 and all(f == 0 for f in fingers[2:]):
+            lm_list = hand["lmList"]
+            x,y = lm_list[8][:2]
+            self.hover_shape_index = self.select_shape_at(x, y)
+            
+        else:
+            self.hover_shape_index = None
+        
 
     # **NEW: Method to record the current drawing state.
     def record_state(self):
@@ -426,6 +444,7 @@ class DrawingApp:
                         else:
                             helping_hand = hand
                 
+                self.detect_hover(drawing_hand)
                 # Handle two-hand gestures
                 if drawing_hand and helping_hand:
                     self.handle_reshaping(drawing_hand, helping_hand)
@@ -506,31 +525,39 @@ class DrawingApp:
             cv2.circle(img=img, center=(line[0][0], int(tool_position)), radius=5, color=(255, 0, 255))
 
     def render_canvas(self, background, drawing_canvas):
+        """Render canvas with enhanced hover effects."""
         combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
         
         for idx, shape in enumerate(self.dropped_shapes):
             if shape:
+                is_highlighted = (idx == self.hover_shape_index)
+                base_color = (0, 0, 255)  # Normal outline color
+                
                 if isinstance(shape, tuple):
                     # Draw circle
                     cx, cy, r = shape
-                    # Draw fill only if color was explicitly set
-                    if idx in self.shape_colors:
-                        cv2.circle(combined, (int(cx), int(cy)), int(r), self.shape_colors[idx], -1)
-                    # Always draw outline
-                    cv2.circle(combined, (int(cx), int(cy)), int(r), (0, 0, 255), 1)
+                    if is_highlighted:
+                        # Draw shadow effect
+                        cv2.circle(combined, (int(cx), int(cy)), int(r + 4), (120, 120, 120), 2)  # Outer shadow
+                        cv2.circle(combined, (int(cx), int(cy)), int(r), base_color, 3)  # Thicker outline
+                    else:
+                        # Normal outline
+                        cv2.circle(combined, (int(cx), int(cy)), int(r), base_color, 1)
                 else:
                     # Handle polygon shapes
                     clipped = clip_polygon(shape, drawing_canvas)
                     if clipped:
-                        # Draw fill only if color was explicitly set
-                        if idx in self.shape_colors:
-                            pts = np.array(clipped, np.int32)
-                            cv2.fillPoly(combined, [pts], self.shape_colors[idx])
-                        # Always draw outline
-                        self.draw_shapes.polygon(combined, points=clipped, color=(0, 0, 255))
+                        pts = np.array(clipped, np.int32)
+                        if is_highlighted:
+                            # Draw shadow effect
+                            cv2.polylines(combined, [pts], True, (120, 120, 120), 7)  # Outer shadow
+                            cv2.polylines(combined, [pts], True, base_color, 4)  # Thicker outline
+                        else:
+                            # Normal outline
+                            cv2.polylines(combined, [pts], True, base_color, 1)
         
         return combined
-
+    
     def select_shape_at(self, x, y):
         """Return the index of a shape that contains point (x,y), or None."""
         for i in range(len(self.dropped_shapes) - 1, -1, -1):
