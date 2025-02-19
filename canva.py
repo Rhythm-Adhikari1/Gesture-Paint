@@ -111,7 +111,7 @@ class DrawingApp:
             "undo": [(1070, 20), (1150, 100)],      # **UNDO button area
             "redo": [(1150, 20), (1230, 100)],     # **REDO button area
             "thickness line" : [(1110, 330), (1110, 450)],
-            "thickness button" : [(1070,100 ), (1150, 180)]
+            "thickness button" : [(1150, 120), (1240, 200)], 
         }
         
         # **NEW: Initialize undo and redo stacks.
@@ -437,6 +437,7 @@ class DrawingApp:
                     # **NEW: Process undo/redo first.
                     lm_list = drawing_hand["lmList"]
                     x, y = lm_list[8][:2]
+         
 
                     self.undo(drawing_hand)
                     self.redo(drawing_hand)
