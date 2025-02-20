@@ -17,6 +17,7 @@ class DrawingApp:
         self.cap.set(3, self.w)
         self.cap.set(4, self.h)
         self.eraser_button_clicked = False
+        self.fill_button_clicked = False
         
         self.vertex_selection_radius = 10  # Radius to detect vertex clicks
         self.selected_vertex_index = None  # Track which vertex is selected
@@ -117,6 +118,7 @@ class DrawingApp:
             "redo": [(1150, 20), (1230, 95)],     # **REDO button area
             "thickness line" : [(1110, 280), (1110, 500)],
             "thickness button" : [(1150, 120), (1240, 200)], 
+            "fill" : [(1070, 115), (1145, 192)], 
         }
         
         # **NEW: Initialize undo and redo stacks.
@@ -230,7 +232,7 @@ class DrawingApp:
     
     def fill_shape(self, x, y, hand):
         """Handle shape filling with selected color."""
-        if self.is_index_up(hand):
+        if self.is_index_up(hand) and self.fill_button_clicked == True:
             shape_idx = self.select_shape_at(x, y)
             if shape_idx is not None:
                 if not self.shape_filling: 
@@ -333,6 +335,7 @@ class DrawingApp:
             # Define drawing area and background
             self.background_img = copy.deepcopy(self.background_img_unchanged)
             background_resized = cv2.resize(self.background_img, (self.w, self.h))
+            self.color_flags["red"] = False
             
             # Initialize canvas and save initial state
             if self.canvas is None:
@@ -371,7 +374,7 @@ class DrawingApp:
                     x, y = lm_list[8][:2]
                     
                     # Check Coordinates
-                    print(x,y)
+                    # print(x,y)
       
          
 
@@ -421,6 +424,10 @@ class DrawingApp:
         if self.eraser_button_clicked:
             rect = self.buttons["eraser"]
             cv2.rectangle(img, rect[0], rect[1], (0, 255, 0), 2)  # Green border for eraser button
+        
+        if self.fill_button_clicked:
+            rect = self.buttons['fill']
+            cv2.rectangle(img, rect[0], rect[1], (0, 255, 0), 2)
 
     def point_in_rect(self, x, y, rect):
         (x1, y1), (x2, y2) = rect
@@ -654,6 +661,30 @@ class DrawingApp:
                 self.color_flags[c] = (c == color)
             print(f"{color.capitalize()} Color Selected")
 
+    def handle_fill(self, x, y, hand):
+        fill_rect = self.buttons["fill"]
+        color_already_selected = False
+
+        if self.point_in_rect(x,y, fill_rect):
+            if self.is_index_up(hand):
+                self.fill_button_clicked = True
+                self.eraser_button_clicked = False
+                self.brush_button_clicked = False
+                print("Fill Button Clicked")
+        
+        for color, flag in self.color_flags.items():
+            if flag:
+                color_already_selected = True
+        
+        if  not color_already_selected: 
+            self.color_flags["red"] = True
+                
+            
+            
+
+
+
+
     def handle_brush(self, x, y, hand):
         """Handle brush and eraser tools with state saving."""
         brush_rect = self.buttons["brush"]
@@ -664,6 +695,7 @@ class DrawingApp:
             if self.is_index_up(hand):
                 self.brush_button_clicked = True
                 self.eraser_button_clicked = False
+                self.fill_button_clicked = False
                 print("Brush Button Clicked")
                 
         # Check for eraser button
@@ -671,6 +703,7 @@ class DrawingApp:
             if self.is_index_up(hand):
                 self.eraser_button_clicked = True
                 self.brush_button_clicked = False
+                self.fill_button_clicked  = False
                 print("Eraser Button Clicked")
                 
         # Handle drawing/erasing
@@ -755,6 +788,9 @@ class DrawingApp:
         
         # Process brush tool
         self.handle_brush(x, y, hand)
+
+        # Process fill tool
+        self.handle_fill(x, y, hand)
         
         # Process color buttons
         self.handle_color_button("red", x, y, hand)
