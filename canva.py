@@ -7,6 +7,7 @@ import math
 from transform import Transformation
 import copy
 from RayCasting import is_point_in_polygon
+from colorfill import fill_poly
 
 class DrawingApp:
     def __init__(self):
@@ -114,7 +115,7 @@ class DrawingApp:
             "yellow": [(495, 20), (575, 100)],
             "undo": [(1070, 20), (1150, 100)],      # **UNDO button area
             "redo": [(1150, 20), (1230, 100)],     # **REDO button area
-            "thickness line" : [(1110, 330), (1110, 450)],
+            "thickness line" : [(1110, 280), (1110, 500)],
             "thickness button" : [(1150, 120), (1240, 200)], 
         }
         
@@ -517,13 +518,15 @@ class DrawingApp:
                 point2 = np.array(left_hand["lmList"][9][:2])
                 point1 = np.array(left_hand["lmList"][0][:2])
                 current_distance_norm = current_distance / np.linalg.norm(point1 - point2)
-                self.brush_thickness = np.interp(current_distance_norm, [0.14, 1.587], [1, 20])
+                print(current_distance_norm)
+                self.brush_thickness = np.interp(current_distance_norm, [0.14, 1.8], [1, 100])
             
             # Now draw the UI indicator on the image that will be rendered.
             line = self.buttons["thickness line"]
             self.draw_shapes.line(img=img, point1=line[0], point2=line[1], color=(255, 0, 255), thickness=3)
-            tool_position = np.interp(self.brush_thickness, [1, 20], [line[1][1], line[0][1]])
-            cv2.circle(img=img, center=(line[0][0], int(tool_position)), radius=5, color=(255, 0, 255))
+            tool_position = np.interp(self.brush_thickness, [1, 100], [line[1][1], line[0][1]])
+            self.draw_shapes.draw_circle(img, center=(line[0][0], int(tool_position)), radius=5, 
+                             outline_color=(0,0,0),thickness= 1,fill_color= (255, 0, 255) )
 
 
 
@@ -547,15 +550,15 @@ class DrawingApp:
                     # Handle circle shapes: shape = (cx, cy, r)
                     cx, cy, r = shape
                     # Fill the circle if a fill color exists.
-                    if fill_color is not None:
-                        cv2.circle(combined, (int(cx), int(cy)), int(r), fill_color, thickness=-1)
+                    
                     # Draw the circle outline.
                     self.draw_shapes.draw_circle(
                         combined, 
-                        int(cx), int(cy), int(r), 
-                        outline_color,
+                        center= (int(cx), int(cy)), radius= int(r), 
+                        outline_color= outline_color,
                         thickness=2 if is_highlighted else 1,
-                        is_highlighted=is_highlighted
+                        is_highlighted=is_highlighted,
+                        fill_color= fill_color
                     )
                 else:
                     # Handle polygon shapes.
@@ -564,13 +567,13 @@ class DrawingApp:
                         pts = np.array(clipped, np.int32)
                         # Fill the polygon if a fill color exists.
                         if fill_color is not None:
-                            cv2.fillPoly(combined, [pts], fill_color)
+                            fill_poly(combined, pts, fill_color)
                         # Draw the polygon outline.
                         if is_highlighted:
-                            cv2.polylines(combined, [pts], True, (180, 180, 180), 2)
-                            cv2.polylines(combined, [pts], True, outline_color, 2)
+                            self.draw_shapes.polygon(combined, pts, (180, 180, 180), thickness=2)
+                            self.draw_shapes.polygon(combined, pts, outline_color, thickness=2)
                         else:
-                            cv2.polylines(combined, [pts], True, outline_color, 1)
+                            self.draw_shapes.polygon(combined, pts, outline_color, thickness=1)
         
         return combined
 
@@ -738,21 +741,21 @@ class DrawingApp:
                 self.prev_x, self.prev_y = x, y
                 self.brush_drawing = True  # **Start brush drawing action
 
-            self.draw_shapes.line(self.canvas, (self.prev_x, self.prev_y), (x, y), color=self.get_color(), thickness=self.brush_thickness)
+            self.draw_shapes.line(self.canvas, (self.prev_x, self.prev_y), (x, y), color=self.get_color(), thickness= int(self.brush_thickness))
 
             # Draw line based on selected tool
             if self.brush_button_clicked:
-                cv2.line(self.canvas, 
+                self.draw_shapes.line(self.canvas, 
                         (self.prev_x, self.prev_y), 
                         (x, y), 
                         self.get_color(), 
-                        thickness=5)
+                        thickness= int(self.brush_thickness))
             elif self.eraser_button_clicked:
-                cv2.line(self.canvas, 
+                self.draw_shapes.line(self.canvas, 
                         (self.prev_x, self.prev_y), 
                         (x, y), 
                         (0, 0, 0), 
-                        thickness=20)
+                        thickness = int(self.brush_thickness))
             
             # Update previous position
             self.prev_x, self.prev_y = x, y
