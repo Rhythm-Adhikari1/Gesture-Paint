@@ -6,6 +6,7 @@ from clipping import clip_polygon
 import math
 from transform import Transformation
 import copy
+from RayCasting import is_point_in_polygon
 
 class DrawingApp:
     def __init__(self):
@@ -529,41 +530,49 @@ class DrawingApp:
     
     
 
-# Modify render_canvas method to use the new circle drawing function:
+    # Modify render_canvas method to use the new circle drawing function:
     def render_canvas(self, background, drawing_canvas):
-
-        #Render canvas with enhanced hover effects.
+        # Merge the background and persistent canvas.
         combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
         
         for idx, shape in enumerate(self.dropped_shapes):
             if shape:
                 is_highlighted = (idx == self.hover_shape_index)
-                base_color = (0, 0, 255)  # Normal outline color
+                outline_color = (0, 0, 255)  # Default outline color
+                
+                # Get the fill color for this shape if it was set.
+                fill_color = self.shape_colors.get(idx, None)
                 
                 if isinstance(shape, tuple):
-                    # Draw circle using midpoint algorithm
+                    # Handle circle shapes: shape = (cx, cy, r)
                     cx, cy, r = shape
+                    # Fill the circle if a fill color exists.
+                    if fill_color is not None:
+                        cv2.circle(combined, (int(cx), int(cy)), int(r), fill_color, thickness=-1)
+                    # Draw the circle outline.
                     self.draw_shapes.draw_circle(
                         combined, 
                         int(cx), int(cy), int(r), 
-                        base_color,
+                        outline_color,
                         thickness=2 if is_highlighted else 1,
                         is_highlighted=is_highlighted
                     )
                 else:
-                    # Handle polygon shapes (unchanged)
+                    # Handle polygon shapes.
                     clipped = clip_polygon(shape, drawing_canvas)
                     if clipped:
                         pts = np.array(clipped, np.int32)
+                        # Fill the polygon if a fill color exists.
+                        if fill_color is not None:
+                            cv2.fillPoly(combined, [pts], fill_color)
+                        # Draw the polygon outline.
                         if is_highlighted:
                             cv2.polylines(combined, [pts], True, (180, 180, 180), 2)
-                            cv2.polylines(combined, [pts], True, base_color, 2)
+                            cv2.polylines(combined, [pts], True, outline_color, 2)
                         else:
-                            cv2.polylines(combined, [pts], True, base_color, 1)
+                            cv2.polylines(combined, [pts], True, outline_color, 1)
         
         return combined
-
-
 
     
     def select_shape_at(self, x, y):
@@ -576,7 +585,7 @@ class DrawingApp:
                     return i
             else:
                 pts = np.array(shape, np.int32)
-                if cv2.pointPolygonTest(pts, (x, y), False) >= 0:
+                if is_point_in_polygon((x, y), pts):
                     print(f"Shape {i} selected for dragging")
                     return i
         return None
