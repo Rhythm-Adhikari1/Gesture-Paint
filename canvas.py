@@ -98,7 +98,7 @@ class DrawingApp:
         self.hover_highlight_color = (0, 255, 0)
         self.hover_thickness = 2
         
-        self.brush_thickness = 4
+        self.brush_thickness = 8
 
         # Define button areas as (top-left, bottom-right)
         self.buttons = {
