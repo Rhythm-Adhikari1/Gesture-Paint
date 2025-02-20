@@ -105,19 +105,19 @@ class DrawingApp:
 
         # Define button areas as (top-left, bottom-right)
         self.buttons = {
-            "brush": [(20, 20), (100, 100)],
-            "eraser": [(120, 20), (200, 100)],
-            "square": [(620, 20), (685, 95)],
-            "rectangle": [(700, 20), (775, 95)],
-            "line": [(785, 20), (855, 95)],
-            "triangle": [(870, 20), (945, 95)],
+            "brush": [(30, 20), (108, 95)],
+            "eraser": [(115, 20), (195, 95)],
+            "square": [(608, 20), (685, 95)],
+            "rectangle": [(695, 20), (770, 95)],
+            "line": [(780, 20), (860, 95)],
+            "triangle": [(865, 20), (945, 95)],
             "circle": [(955, 20), (1030, 95)],
-            "red": [(230, 20), (310, 100)],
-            "blue": [(325, 20), (495, 100)],
-            "green": [(380, 20), (485, 100)],
-            "yellow": [(495, 20), (575, 100)],
-            "undo": [(1070, 20), (1150, 100)],      # **UNDO button area
-            "redo": [(1150, 20), (1230, 100)],     # **REDO button area
+            "red": [(230, 18), (310, 95)],
+            "blue": [(320, 18), (395, 95)],
+            "green": [(405, 18), (485, 95)],
+            "yellow": [(493, 18), (570, 95)],
+            "undo": [(1070, 20), (1150, 95)],      # **UNDO button area
+            "redo": [(1150, 20), (1230, 95)],     # **REDO button area
             "thickness line" : [(1110, 280), (1110, 500)],
             "thickness button" : [(1150, 120), (1240, 200)], 
         }
@@ -460,6 +460,9 @@ class DrawingApp:
                     # **NEW: Process undo/redo first.
                     lm_list = drawing_hand["lmList"]
                     x, y = lm_list[8][:2]
+                    
+                    # Check Coordinates
+                    print(x,y)
       
          
 
