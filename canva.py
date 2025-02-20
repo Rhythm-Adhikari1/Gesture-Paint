@@ -524,32 +524,46 @@ class DrawingApp:
             tool_position = np.interp(self.brush_thickness, [1, 20], [line[1][1], line[0][1]])
             cv2.circle(img=img, center=(line[0][0], int(tool_position)), radius=5, color=(255, 0, 255))
 
+
+
+    
+    
+
+# Modify render_canvas method to use the new circle drawing function:
     def render_canvas(self, background, drawing_canvas):
+
+        #Render canvas with enhanced hover effects.
         combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
         
         for idx, shape in enumerate(self.dropped_shapes):
-            is_highlighted = (idx == self.hover_shape_index)
-            
-            # Check if there's a fill color for this shape
-            fill_color = self.shape_colors.get(idx, None)
-            
-            if isinstance(shape, tuple):
-                cx, cy, r = shape
-                if fill_color:
-                    cv2.circle(combined, (int(cx), int(cy)), int(r), fill_color, thickness=-1)
-                # Draw the outline (you might want to adjust thickness or color based on highlighting)
-                outline_color = (0, 0, 255) if not is_highlighted else (0, 255, 0)
-                cv2.circle(combined, (int(cx), int(cy)), int(r), outline_color, 2)
-            else:
-                clipped = clip_polygon(shape, drawing_canvas)
-                if clipped:
-                    pts = np.array(clipped, np.int32)
-                    if fill_color:
-                        cv2.fillPoly(combined, [pts], fill_color)
-                    outline_color = (0, 0, 255) if not is_highlighted else (0, 255, 0)
-                    cv2.polylines(combined, [pts], True, outline_color, 2)
-                    
+            if shape:
+                is_highlighted = (idx == self.hover_shape_index)
+                base_color = (0, 0, 255)  # Normal outline color
+                
+                if isinstance(shape, tuple):
+                    # Draw circle using midpoint algorithm
+                    cx, cy, r = shape
+                    self.draw_shapes.draw_circle(
+                        combined, 
+                        int(cx), int(cy), int(r), 
+                        base_color,
+                        thickness=2 if is_highlighted else 1,
+                        is_highlighted=is_highlighted
+                    )
+                else:
+                    # Handle polygon shapes (unchanged)
+                    clipped = clip_polygon(shape, drawing_canvas)
+                    if clipped:
+                        pts = np.array(clipped, np.int32)
+                        if is_highlighted:
+                            cv2.polylines(combined, [pts], True, (180, 180, 180), 2)
+                            cv2.polylines(combined, [pts], True, base_color, 2)
+                        else:
+                            cv2.polylines(combined, [pts], True, base_color, 1)
+        
         return combined
+
+
 
     
     def select_shape_at(self, x, y):
