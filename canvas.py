@@ -681,6 +681,7 @@ class DrawingApp:
             if self.is_index_up(hand):
                 self.brush_button_clicked = True
                 self.eraser_button_clicked = False
+                self.fill_button_clicked = False
                 print("Brush Button Clicked")
                 
         # Check for eraser button
@@ -688,6 +689,7 @@ class DrawingApp:
             if self.is_index_up(hand):
                 self.eraser_button_clicked = True
                 self.brush_button_clicked = False
+                self.fill_button_clicked  = False
                 print("Eraser Button Clicked")
                 
         # Handle drawing/erasing
