@@ -467,7 +467,30 @@ class DrawingApp:
     # Modify render_canvas method to use the new circle drawing function:
     def render_canvas(self, background, drawing_canvas):
         # Merge the background and persistent canvas.
-        combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
+
+        combined = background.copy()
+    
+        # Define ROI using drawing_canvas coordinates.
+        x1, y1 = drawing_canvas[0]  # e.g., (30, 115)
+        x2, y2 = drawing_canvas[2]  # e.g., (1032, 695)
+        
+        # Extract the ROI from both background and canvas.
+        background_roi = combined[y1:y2, x1:x2]
+        canvas_roi = self.canvas[y1:y2, x1:x2]
+        
+        # Create a mask: mark pixels that are drawn on (non-zero) in any channel.
+        mask = (canvas_roi != 0).any(axis=2)  # Boolean mask: True where drawing exists.
+        
+        # Make a copy of the ROI from the background to serve as the composite ROI.
+        composite_roi = background_roi.copy()
+        
+        # For pixels where there is drawing (mask is True), use the canvas pixel.
+        composite_roi[mask] = canvas_roi[mask]
+        
+        # Replace the ROI in the output image.
+        combined[y1:y2, x1:x2] = composite_roi
+
+        #combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
         
         for idx, shape in enumerate(self.dropped_shapes):
             if shape:
