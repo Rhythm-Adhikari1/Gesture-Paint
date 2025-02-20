@@ -114,7 +114,7 @@ class DrawingApp:
             "undo": [(1070, 20), (1150, 100)],      # **UNDO button area
             "redo": [(1150, 20), (1230, 100)],     # **REDO button area
             "thickness line" : [(1110, 330), (1110, 450)],
-            "thickness button" : [(1070,100 ), (1150, 180)]
+            "thickness button" : [(1150, 120), (1240, 200)], 
         }
         
         # **NEW: Initialize undo and redo stacks.
@@ -456,6 +456,7 @@ class DrawingApp:
                     # **NEW: Process undo/redo first.
                     lm_list = drawing_hand["lmList"]
                     x, y = lm_list[8][:2]
+         
 
                     self.undo(drawing_hand)
                     self.redo(drawing_hand)
@@ -530,6 +531,7 @@ class DrawingApp:
 
 # Modify render_canvas method to use the new circle drawing function:
     def render_canvas(self, background, drawing_canvas):
+
         #Render canvas with enhanced hover effects.
         combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
         
@@ -563,49 +565,6 @@ class DrawingApp:
 
 
 
-
-
-
-
-
-
-
-
-
-
-    # def render_canvas(self, background, drawing_canvas):
-    #     """Render canvas with enhanced hover effects."""
-    #     combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
-        
-    #     for idx, shape in enumerate(self.dropped_shapes):
-    #         if shape:
-    #             is_highlighted = (idx == self.hover_shape_index)
-    #             base_color = (0, 0, 255)  # Normal outline color
-                
-    #             if isinstance(shape, tuple):
-    #                 # Draw circle
-    #                 cx, cy, r = shape
-    #                 if is_highlighted:
-    #                     # Draw shadow effect
-    #                     cv2.circle(combined, (int(cx), int(cy)), int(r + 4), (120, 120, 120), 2)  # Outer shadow
-    #                     cv2.circle(combined, (int(cx), int(cy)), int(r), base_color, 3)  # Thicker outline
-    #                 else:
-    #                     # Normal outline
-    #                     cv2.circle(combined, (int(cx), int(cy)), int(r), base_color, 1)
-    #             else:
-    #                 # Handle polygon shapes
-    #                 clipped = clip_polygon(shape, drawing_canvas)
-    #                 if clipped:
-    #                     pts = np.array(clipped, np.int32)
-    #                     if is_highlighted:
-    #                         # Draw shadow effect
-    #                         cv2.polylines(combined, [pts], True, (120, 120, 120), 7)  # Outer shadow
-    #                         cv2.polylines(combined, [pts], True, base_color, 4)  # Thicker outline
-    #                     else:
-    #                         # Normal outline
-    #                         cv2.polylines(combined, [pts], True, base_color, 1)
-        
-    #     return combined
     
     def select_shape_at(self, x, y):
         """Return the index of a shape that contains point (x,y), or None."""
