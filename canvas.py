@@ -474,9 +474,8 @@ class DrawingApp:
     # Modify render_canvas method to use the new circle drawing function:
     def render_canvas(self, background, drawing_canvas):
         # Merge the background and persistent canvas.
-
         combined = background.copy()
-    
+
         # Define ROI using drawing_canvas coordinates.
         x1, y1 = drawing_canvas[0]  # e.g., (30, 115)
         x2, y2 = drawing_canvas[2]  # e.g., (1032, 695)
@@ -497,8 +496,6 @@ class DrawingApp:
         # Replace the ROI in the output image.
         combined[y1:y2, x1:x2] = composite_roi
 
-        #combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
-        
         for idx, shape in enumerate(self.dropped_shapes):
             if shape:
                 is_highlighted = (idx == self.hover_shape_index)
@@ -536,9 +533,11 @@ class DrawingApp:
                         else:
                             self.draw_shapes.polygon(combined, pts, outline_color, thickness=1)
         
+        # Draw the brush strokes on top of everything else
+        combined = cv2.addWeighted(combined, 1, self.canvas, 1, 0)
+        
         return combined
-
-    
+        
     def select_shape_at(self, x, y):
         """Return the index of a shape that contains point (x,y), or None."""
         for i in range(len(self.dropped_shapes) - 1, -1, -1):
