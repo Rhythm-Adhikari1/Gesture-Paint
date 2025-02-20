@@ -52,6 +52,9 @@ class DrawingApp:
         self.edge_extension_running = False
         self.vertex_dragging_running = False
 
+        # Drawing Canvas
+        self.drawing_canvas = [(30, 115), (1035, 115), (1035, 690), (30, 690)]
+
         # Tool button states stored in dictionaries
         self.shape_flags = {
             "square": False,
@@ -419,7 +422,6 @@ class DrawingApp:
             self.h, self.w, _ = frame.shape
 
             # Define drawing area and background
-            drawing_canvas = [(30, 115), (1040, 115), (1040, 690), (30, 690)]
             self.background_img = copy.deepcopy(self.background_img_unchanged)
             background_resized = cv2.resize(self.background_img, (self.w, self.h))
             
@@ -458,7 +460,7 @@ class DrawingApp:
                     # **NEW: Process undo/redo first.
                     lm_list = drawing_hand["lmList"]
                     x, y = lm_list[8][:2]
-                    print(x, y)
+      
          
 
                     self.undo(drawing_hand)
@@ -475,7 +477,7 @@ class DrawingApp:
                             self.handle_dragging(drawing_hand)
 
             # Merge canvas and render shapes
-            combined = self.render_canvas(background_resized, drawing_canvas)
+            combined = self.render_canvas(background_resized, self.drawing_canvas)
             cv2.imshow("Virtual Canvas", combined)
             self.rotation = False
 
@@ -492,7 +494,7 @@ class DrawingApp:
         return x1 < x < x2 and y1 < y < y2
 
     def check_hand_inside_canvas(self, x, y):
-        return 30 < x < 1040 and 115 < y < 690
+        return 30 < x < 1035 and 115 < y < 690
 
     def is_index_up(self, hand):
         """Return True if only the index finger is up."""
@@ -634,18 +636,15 @@ class DrawingApp:
                 else:
                     # Handle polygon dragging
                     new_shape = []
-                    can_move = True
-                    # Check if all vertices will be within canvas after moving
                     for px, py in shape:
                         new_x = px + dx
                         new_y = py + dy
-                        if not self.check_hand_inside_canvas(new_x, new_y):
-                            can_move = False
-                            break
                         new_shape.append((new_x, new_y))
                     
-                    if can_move:
-                        self.dropped_shapes[self.selected_shape_index] = new_shape
+                    # Clip the shape to the canvas
+                    clipped_shape = clip_polygon(new_shape, self.drawing_canvas )
+                    if clipped_shape:
+                        self.dropped_shapes[self.selected_shape_index] = clipped_shape
                 
                 # Update previous position
                 self.prev_index_x, self.prev_index_y = x, y
@@ -657,10 +656,6 @@ class DrawingApp:
                     self.prev_index_x, self.prev_index_y = x, y
                 self.dragging_active = False
         else:
-            # if self.dragging_active:
-            #     self.record_state()  # **Record state after dragging finishes.
-            #     self.dragging_active = False
-            # Reset selection when gesture ends
             self.dragging_active = False
             self.selected_shape_index = None
             self.prev_index_x, self.prev_index_y = None, None
