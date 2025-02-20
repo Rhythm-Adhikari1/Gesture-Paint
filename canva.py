@@ -523,8 +523,71 @@ class DrawingApp:
             tool_position = np.interp(self.brush_thickness, [1, 20], [line[1][1], line[0][1]])
             cv2.circle(img=img, center=(line[0][0], int(tool_position)), radius=5, color=(255, 0, 255))
 
+
+    def draw_circle_midpoint(self, combined, cx, cy, r, color, thickness=1, is_highlighted=False):
+        """Draw circle using midpoint circle algorithm."""
+        def plot_circle_points(x, y, cx, cy):
+            # Plot points in all octants
+            points = [
+                (cx + x, cy + y), (cx - x, cy + y),
+                (cx + x, cy - y), (cx - x, cy - y),
+                (cx + y, cy + x), (cx - y, cy + x),
+                (cx + y, cy - x), (cx - y, cy - x)
+            ]
+            return points
+
+    # If highlighted, draw shadow first
+        if is_highlighted:
+            r_shadow = r + 2
+            # Draw shadow using midpoint algorithm
+            x, y = 0, r_shadow
+            p = 1 - r_shadow
+            prev_points = None
+            
+            while x <= y:
+                points = plot_circle_points(x, y, cx, cy)
+                if prev_points:
+                    for i in range(len(points)):
+                        cv2.line(combined, 
+                                (int(prev_points[i][0]), int(prev_points[i][1])), 
+                                (int(points[i][0]), int(points[i][1])), 
+                                (180, 180, 180), 2)
+                prev_points = points
+                
+                if p <= 0:
+                    x += 1
+                    p = p + 2 * x + 1
+                else:
+                    x += 1
+                    y -= 1
+                    p = p + 2 * (x - y) + 1
+
+        # Draw main circle
+        x, y = 0, r
+        p = 1 - r
+        prev_points = None
+        
+        while x <= y:
+            points = plot_circle_points(x, y, cx, cy)
+            if prev_points:
+                for i in range(len(points)):
+                    cv2.line(combined, 
+                            (int(prev_points[i][0]), int(prev_points[i][1])), 
+                            (int(points[i][0]), int(points[i][1])), 
+                            color, thickness)
+            prev_points = points
+            
+            if p <= 0:
+                x += 1
+                p = p + 2 * x + 1
+            else:
+                x += 1
+                y -= 1
+                p = p + 2 * (x - y) + 1
+
+# Modify render_canvas method to use the new circle drawing function:
     def render_canvas(self, background, drawing_canvas):
-        """Render canvas with enhanced hover effects."""
+        #Render canvas with enhanced hover effects.
         combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
         
         for idx, shape in enumerate(self.dropped_shapes):
@@ -533,29 +596,73 @@ class DrawingApp:
                 base_color = (0, 0, 255)  # Normal outline color
                 
                 if isinstance(shape, tuple):
-                    # Draw circle
+                    # Draw circle using midpoint algorithm
                     cx, cy, r = shape
-                    if is_highlighted:
-                        # Draw shadow effect
-                        cv2.circle(combined, (int(cx), int(cy)), int(r + 4), (120, 120, 120), 2)  # Outer shadow
-                        cv2.circle(combined, (int(cx), int(cy)), int(r), base_color, 3)  # Thicker outline
-                    else:
-                        # Normal outline
-                        cv2.circle(combined, (int(cx), int(cy)), int(r), base_color, 1)
+                    self.draw_circle_midpoint(
+                        combined, 
+                        int(cx), int(cy), int(r), 
+                        base_color,
+                        thickness=2 if is_highlighted else 1,
+                        is_highlighted=is_highlighted
+                    )
                 else:
-                    # Handle polygon shapes
+                    # Handle polygon shapes (unchanged)
                     clipped = clip_polygon(shape, drawing_canvas)
                     if clipped:
                         pts = np.array(clipped, np.int32)
                         if is_highlighted:
-                            # Draw shadow effect
-                            cv2.polylines(combined, [pts], True, (120, 120, 120), 7)  # Outer shadow
-                            cv2.polylines(combined, [pts], True, base_color, 4)  # Thicker outline
+                            cv2.polylines(combined, [pts], True, (180, 180, 180), 2)
+                            cv2.polylines(combined, [pts], True, base_color, 2)
                         else:
-                            # Normal outline
                             cv2.polylines(combined, [pts], True, base_color, 1)
         
         return combined
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # def render_canvas(self, background, drawing_canvas):
+    #     """Render canvas with enhanced hover effects."""
+    #     combined = cv2.addWeighted(background, 0.8, self.canvas, 1, 0)
+        
+    #     for idx, shape in enumerate(self.dropped_shapes):
+    #         if shape:
+    #             is_highlighted = (idx == self.hover_shape_index)
+    #             base_color = (0, 0, 255)  # Normal outline color
+                
+    #             if isinstance(shape, tuple):
+    #                 # Draw circle
+    #                 cx, cy, r = shape
+    #                 if is_highlighted:
+    #                     # Draw shadow effect
+    #                     cv2.circle(combined, (int(cx), int(cy)), int(r + 4), (120, 120, 120), 2)  # Outer shadow
+    #                     cv2.circle(combined, (int(cx), int(cy)), int(r), base_color, 3)  # Thicker outline
+    #                 else:
+    #                     # Normal outline
+    #                     cv2.circle(combined, (int(cx), int(cy)), int(r), base_color, 1)
+    #             else:
+    #                 # Handle polygon shapes
+    #                 clipped = clip_polygon(shape, drawing_canvas)
+    #                 if clipped:
+    #                     pts = np.array(clipped, np.int32)
+    #                     if is_highlighted:
+    #                         # Draw shadow effect
+    #                         cv2.polylines(combined, [pts], True, (120, 120, 120), 7)  # Outer shadow
+    #                         cv2.polylines(combined, [pts], True, base_color, 4)  # Thicker outline
+    #                     else:
+    #                         # Normal outline
+    #                         cv2.polylines(combined, [pts], True, base_color, 1)
+        
+    #     return combined
     
     def select_shape_at(self, x, y):
         """Return the index of a shape that contains point (x,y), or None."""
