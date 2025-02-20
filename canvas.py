@@ -118,7 +118,7 @@ class DrawingApp:
             "redo": [(1150, 20), (1230, 95)],     # **REDO button area
             "thickness line" : [(1110, 280), (1110, 500)],
             "thickness button" : [(1150, 120), (1240, 200)], 
-            "fill" : [(1070, 120), (1150, 200)], 
+            "fill" : [(1070, 115), (1145, 192)], 
         }
         
         # **NEW: Initialize undo and redo stacks.
@@ -423,6 +423,10 @@ class DrawingApp:
         if self.eraser_button_clicked:
             rect = self.buttons["eraser"]
             cv2.rectangle(img, rect[0], rect[1], (0, 255, 0), 2)  # Green border for eraser button
+        
+        if self.fill_button_clicked:
+            rect = self.buttons['fill']
+            cv2.rectangle(img, rect[0], rect[1], (0, 255, 0), 2)
 
     def point_in_rect(self, x, y, rect):
         (x1, y1), (x2, y2) = rect
