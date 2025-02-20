@@ -52,6 +52,9 @@ class DrawingApp:
         self.edge_extension_running = False
         self.vertex_dragging_running = False
 
+        # Drawing Canvas
+        self.drawing_canvas = [(30, 115), (1035, 115), (1035, 690), (30, 690)]
+
         # Tool button states stored in dictionaries
         self.shape_flags = {
             "square": False,
@@ -419,7 +422,6 @@ class DrawingApp:
             self.h, self.w, _ = frame.shape
 
             # Define drawing area and background
-            drawing_canvas = [(30, 150), (1030, 150), (1030, self.h - 50), (30, self.h - 50)]
             self.background_img = copy.deepcopy(self.background_img_unchanged)
             background_resized = cv2.resize(self.background_img, (self.w, self.h))
             
@@ -458,6 +460,7 @@ class DrawingApp:
                     # **NEW: Process undo/redo first.
                     lm_list = drawing_hand["lmList"]
                     x, y = lm_list[8][:2]
+      
          
 
                     self.undo(drawing_hand)
@@ -474,7 +477,7 @@ class DrawingApp:
                             self.handle_dragging(drawing_hand)
 
             # Merge canvas and render shapes
-            combined = self.render_canvas(background_resized, drawing_canvas)
+            combined = self.render_canvas(background_resized, self.drawing_canvas)
             cv2.imshow("Virtual Canvas", combined)
             self.rotation = False
 
@@ -491,7 +494,7 @@ class DrawingApp:
         return x1 < x < x2 and y1 < y < y2
 
     def check_hand_inside_canvas(self, x, y):
-        return 30 < x < 1030 and 150 < y < (self.h - 50)
+        return 30 < x < 1035 and 115 < y < 690
 
     def is_index_up(self, hand):
         """Return True if only the index finger is up."""
@@ -527,11 +530,6 @@ class DrawingApp:
             tool_position = np.interp(self.brush_thickness, [1, 100], [line[1][1], line[0][1]])
             self.draw_shapes.draw_circle(img, center=(line[0][0], int(tool_position)), radius=5, 
                              outline_color=(0,0,0),thickness= 1,fill_color= (255, 0, 255) )
-
-
-
-    
-    
 
     # Modify render_canvas method to use the new circle drawing function:
     def render_canvas(self, background, drawing_canvas):
@@ -638,18 +636,15 @@ class DrawingApp:
                 else:
                     # Handle polygon dragging
                     new_shape = []
-                    can_move = True
-                    # Check if all vertices will be within canvas after moving
                     for px, py in shape:
                         new_x = px + dx
                         new_y = py + dy
-                        if not self.check_hand_inside_canvas(new_x, new_y):
-                            can_move = False
-                            break
                         new_shape.append((new_x, new_y))
                     
-                    if can_move:
-                        self.dropped_shapes[self.selected_shape_index] = new_shape
+                    # Clip the shape to the canvas
+                    clipped_shape = clip_polygon(new_shape, self.drawing_canvas)
+                    if clipped_shape:
+                        self.dropped_shapes[self.selected_shape_index] = new_shape if self.check_hand_inside_canvas(x, y) else clipped_shape
                 
                 # Update previous position
                 self.prev_index_x, self.prev_index_y = x, y
@@ -661,10 +656,6 @@ class DrawingApp:
                     self.prev_index_x, self.prev_index_y = x, y
                 self.dragging_active = False
         else:
-            # if self.dragging_active:
-            #     self.record_state()  # **Record state after dragging finishes.
-            #     self.dragging_active = False
-            # Reset selection when gesture ends
             self.dragging_active = False
             self.selected_shape_index = None
             self.prev_index_x, self.prev_index_y = None, None
