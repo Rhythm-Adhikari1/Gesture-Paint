@@ -53,7 +53,7 @@ class DrawingApp:
         self.vertex_dragging_running = False
 
         # Drawing Canvas
-        self.drawing_canvas = [(30, 115), (1035, 115), (1035, 690), (30, 690)]
+        self.drawing_canvas = [(30, 115), (1032, 115), (1032, 695), (30, 695)]
 
         # Tool button states stored in dictionaries
         self.shape_flags = {
@@ -494,7 +494,7 @@ class DrawingApp:
         return x1 < x < x2 and y1 < y < y2
 
     def check_hand_inside_canvas(self, x, y):
-        return 30 < x < 1035 and 115 < y < 690
+        return 30 < x < 1032 and 115 < y < 695
 
     def is_index_up(self, hand):
         """Return True if only the index finger is up."""
