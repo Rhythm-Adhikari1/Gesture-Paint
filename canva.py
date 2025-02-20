@@ -642,9 +642,9 @@ class DrawingApp:
                         new_shape.append((new_x, new_y))
                     
                     # Clip the shape to the canvas
-                    clipped_shape = clip_polygon(new_shape, self.drawing_canvas )
+                    clipped_shape = clip_polygon(new_shape, self.drawing_canvas)
                     if clipped_shape:
-                        self.dropped_shapes[self.selected_shape_index] = clipped_shape
+                        self.dropped_shapes[self.selected_shape_index] = new_shape if self.check_hand_inside_canvas(x, y) else clipped_shape
                 
                 # Update previous position
                 self.prev_index_x, self.prev_index_y = x, y
