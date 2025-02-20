@@ -17,6 +17,7 @@ class DrawingApp:
         self.cap.set(3, self.w)
         self.cap.set(4, self.h)
         self.eraser_button_clicked = False
+        self.fill_button_clicked = False
         
         self.vertex_selection_radius = 10  # Radius to detect vertex clicks
         self.selected_vertex_index = None  # Track which vertex is selected
@@ -117,6 +118,7 @@ class DrawingApp:
             "redo": [(1150, 20), (1230, 95)],     # **REDO button area
             "thickness line" : [(1110, 280), (1110, 500)],
             "thickness button" : [(1150, 120), (1240, 200)], 
+            "fill" : [(1070, 120), (1150, 200)], 
         }
         
         # **NEW: Initialize undo and redo stacks.
@@ -230,7 +232,7 @@ class DrawingApp:
     
     def fill_shape(self, x, y, hand):
         """Handle shape filling with selected color."""
-        if self.is_index_up(hand):
+        if self.is_index_up(hand) and self.fill_button_clicked == True:
             shape_idx = self.select_shape_at(x, y)
             if shape_idx is not None:
                 if not self.shape_filling: 
@@ -654,6 +656,17 @@ class DrawingApp:
                 self.color_flags[c] = (c == color)
             print(f"{color.capitalize()} Color Selected")
 
+    def handle_fill(self, x, y, hand):
+        fill_rect = self.buttons["fill"]
+
+        if self.point_in_rect(x,y, fill_rect):
+            if self.is_index_up(hand):
+                self.fill_button_clicked = True
+                self.eraser_button_clicked = False
+                self.brush_button_clicked = False
+                print("Fill Button Clicked")
+
+
     def handle_brush(self, x, y, hand):
         """Handle brush and eraser tools with state saving."""
         brush_rect = self.buttons["brush"]
@@ -755,6 +768,9 @@ class DrawingApp:
         
         # Process brush tool
         self.handle_brush(x, y, hand)
+
+        # Process fill tool
+        self.handle_fill(x, y, hand)
         
         # Process color buttons
         self.handle_color_button("red", x, y, hand)
