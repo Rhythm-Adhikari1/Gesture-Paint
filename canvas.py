@@ -25,9 +25,7 @@ class DrawingApp:
         self.shape_colors = {}  # Dictionary to store shape colors
         self.currently_filling = False # Flag to track if filling is in progress
         
-        self.edge_selection_radius = 10
-        self.selected_edge = None  # Will store (shape_index, start_idx, end_idx)
-        self.edge_drag_start = None
+        # Remove edge extension variables
             
         # Load Background Image
         self.background_img_unchanged = cv2.imread("image/image.png")
@@ -49,7 +47,6 @@ class DrawingApp:
         self.undo_in_process = False
         self.redo_in_process = False
         self.shape_filling = False
-        self.edge_extension_running = False
         self.vertex_dragging_running = False
 
         # Drawing Canvas
@@ -249,94 +246,6 @@ class DrawingApp:
         self.shape_filling = False
         return False
             
-    def select_edge_at(self, x, y):
-        """Check if point is near an edge and return (shape_idx, start_idx, end_idx)."""
-        for shape_idx, shape in enumerate(self.dropped_shapes):
-            if isinstance(shape, tuple):  # Skip circles
-                continue
-            
-            for i in range(len(shape)):
-                start = shape[i]
-                end = shape[(i + 1) % len(shape)]
-                
-                # Calculate distance from point to line segment
-                dist = self.point_to_line_distance(x, y, start, end)
-                if dist < self.edge_selection_radius:
-                    return shape_idx, i, (i + 1) % len(shape)
-        return None
-
-    def point_to_line_distance(self, x, y, start, end):
-        """Calculate distance from point to line segment."""
-        x1, y1 = start
-        x2, y2 = end
-        
-        # Calculate squared length of line segment
-        line_length_sq = (x2 - x1)**2 + (y2 - y1)**2
-        if line_length_sq == 0:
-            return math.sqrt((x - x1)**2 + (y - y1)**2)
-        
-        # Calculate projection point
-        t = max(0, min(1, ((x - x1) * (x2 - x1) + (y - y1)) / line_length_sq))
-        proj_x = x1 + t * (x2 - x1)
-        proj_y = y1 + t * (y2 - y1)
-        
-        return math.sqrt((x - proj_x)**2 + (y - proj_y)**2)
-
-    def handle_edge_extension(self, hand):
-        """Handle edge extension while preventing overlap with dragging."""
-        # Skip if rotation, scaling or dragging is active
-        if self.rotation or self.scaling or self.selected_shape_index is not None:
-            return
-
-        lm_list = hand["lmList"]
-        x, y = lm_list[8][:2]
-
-        if self.is_index_up(hand):
-            if self.selected_edge is None:
-                edge_info = self.select_edge_at(x, y)
-                if edge_info:
-                    self.selected_edge = edge_info
-                    self.edge_drag_start = (x, y)
-            else:
-                if self.check_hand_inside_canvas(x, y):
-
-                    if not self.edge_extension_running:
-                        self.record_state()
-
-                    shape_idx, start_idx, end_idx = self.selected_edge
-                    shape = list(self.dropped_shapes[shape_idx])
-                    
-                    # Get the selected edge vertices
-                    start = shape[start_idx]
-                    end = shape[end_idx]
-                    
-                    # Determine if this is a vertical or horizontal edge
-                    is_vertical = abs(end[0] - start[0]) < 10
-                    
-                    if is_vertical:
-                        # For vertical edges, only move the x-coordinate
-                        target_x = x
-                        # Find all vertices with same x-coordinate
-                        ref_x = start[0]
-                        for i in range(len(shape)):
-                            if abs(shape[i][0] - ref_x) < 10:
-                                shape[i] = (target_x, shape[i][1])
-                    else:
-                        # For horizontal edges, only move the y-coordinate
-                        target_y = y
-                        # Find all vertices with same y-coordinate
-                        ref_y = start[1]
-                        for i in range(len(shape)):
-                            if abs(shape[i][1] - ref_y) < 10:
-                                shape[i] = (shape[i][0], target_y)
-                    
-                    self.edge_extension_running = True                    
-                    self.dropped_shapes[shape_idx] = shape
-        else:
-            self.selected_edge = None
-            self.edge_drag_start = None
-            self.edge_extension_running = False
-        
     def handle_vertex_dragging(self, hand):
         """Handle vertex dragging for true geometric shearing while preserving parallelism."""
         if self.rotation or self.scaling:
@@ -473,11 +382,9 @@ class DrawingApp:
                     self.process_hand_buttons(drawing_hand)
                     self.handle_dragging(drawing_hand)
                     
-                    # If not processing a button, allow edge extension (or dragging if no edge is selected)
+                    # If not processing a button, allow dragging
                     if not self.process_hand_buttons(drawing_hand):
-                        self.handle_edge_extension(drawing_hand)
-                        if self.selected_edge is None:
-                            self.handle_dragging(drawing_hand)
+                        self.handle_dragging(drawing_hand)
 
             # Highlight selected buttons
             self.highlight_selected_buttons(background_resized)
@@ -625,7 +532,7 @@ class DrawingApp:
     def handle_dragging(self, hand):
         """Handle shape dragging."""
         # Skip if rotation or edge extension is active
-        if self.rotation or self.selected_edge is not None or self.brush_button_clicked or self.eraser_button_clicked or self.edge_drag_start is not None or self.vertex_dragging_running:  
+        if self.rotation or self.brush_button_clicked or self.eraser_button_clicked or self.vertex_dragging_running:  
             return
         
         lm_list = hand["lmList"]
@@ -834,55 +741,6 @@ class DrawingApp:
         
         return False
 
-    def handle_edge_extension(self, hand):
-        """Handle edge extension while preventing overlap with dragging."""
-        # Skip if rotation, scaling or dragging is active
-        if self.rotation or self.scaling or self.selected_shape_index is not None or self.vertex_dragging_running or self.brush_button_clicked or self.eraser_button_clicked: 
-            return
-
-        lm_list = hand["lmList"]
-        x, y = lm_list[8][:2]
-
-        if self.is_index_up(hand):
-            if self.selected_edge is None:
-                edge_info = self.select_edge_at(x, y)
-                if edge_info:
-                    self.selected_edge = edge_info
-                    self.edge_drag_start = (x, y)
-            else:
-                if self.check_hand_inside_canvas(x, y):
-                    shape_idx, start_idx, end_idx = self.selected_edge
-                    shape = list(self.dropped_shapes[shape_idx])
-                    
-                    # Get the selected edge vertices
-                    start = shape[start_idx]
-                    end = shape[end_idx]
-                    
-                    # Determine if this is a vertical or horizontal edge
-                    is_vertical = abs(end[0] - start[0]) < 10
-                    
-                    if is_vertical:
-                        # For vertical edges, only move the x-coordinate
-                        target_x = x
-                        # Find all vertices with same x-coordinate
-                        ref_x = start[0]
-                        for i in range(len(shape)):
-                            if abs(shape[i][0] - ref_x) < 10:
-                                shape[i] = (target_x, shape[i][1])
-                    else:
-                        # For horizontal edges, only move the y-coordinate
-                        target_y = y
-                        # Find all vertices with same y-coordinate
-                        ref_y = start[1]
-                        for i in range(len(shape)):
-                            if abs(shape[i][1] - ref_y) < 10:
-                                shape[i] = (shape[i][0], target_y)
-                    
-                    self.dropped_shapes[shape_idx] = shape
-        else:
-            self.selected_edge = None
-            self.edge_drag_start = None
-    
     def is_index_and_thump_up(self, hand):
         fingers = self.detector.fingersUp(hand)
         return fingers[0] == 1 and fingers[1] == 1 and fingers[2] == 0 and fingers[3] == 0 and fingers[4] == 0
