@@ -276,7 +276,7 @@ class DrawingApp:
             return math.sqrt((x - x1)**2 + (y - y1)**2)
         
         # Calculate projection point
-        t = max(0, min(1, ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / line_length_sq))
+        t = max(0, min(1, ((x - x1) * (x2 - x1) + (y - y1)) / line_length_sq))
         proj_x = x1 + t * (x2 - x1)
         proj_y = y1 + t * (y2 - y1)
         
@@ -476,6 +476,9 @@ class DrawingApp:
                         if self.selected_edge is None:
                             self.handle_dragging(drawing_hand)
 
+            # Highlight selected buttons
+            self.highlight_selected_buttons(background_resized)
+
             # Merge canvas and render shapes
             combined = self.render_canvas(background_resized, self.drawing_canvas)
             cv2.imshow("Virtual Canvas", combined)
@@ -488,6 +491,26 @@ class DrawingApp:
         # Cleanup
         self.cap.release()
         cv2.destroyAllWindows()
+
+    def highlight_selected_buttons(self, img):
+        """Highlight the currently selected buttons."""
+        for tool, selected in self.shape_flags.items():
+            if selected:
+                rect = self.buttons[tool]
+                cv2.rectangle(img, rect[0], rect[1], (0, 255, 0), 2)  # Green border for selected shape buttons
+
+        for color, selected in self.color_flags.items():
+            if selected:
+                rect = self.buttons[color]
+                cv2.rectangle(img, rect[0], rect[1], (0, 255, 0), 2)  # Green border for selected color buttons
+
+        if self.brush_button_clicked:
+            rect = self.buttons["brush"]
+            cv2.rectangle(img, rect[0], rect[1], (0, 255, 0), 2)  # Green border for brush button
+
+        if self.eraser_button_clicked:
+            rect = self.buttons["eraser"]
+            cv2.rectangle(img, rect[0], rect[1], (0, 255, 0), 2)  # Green border for eraser button
 
     def point_in_rect(self, x, y, rect):
         (x1, y1), (x2, y2) = rect
