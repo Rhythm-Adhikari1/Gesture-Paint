@@ -23,6 +23,7 @@ def clip_polygon(subject_polygon, clip_boundary):
     output_list = subject_polygon
     # Create edges from the clipping boundary
     clip_edges = [(clip_boundary[i], clip_boundary[i+1]) for i in range(len(clip_boundary)-1)]
+    clip_edges.append((clip_boundary[-1], clip_boundary[0]))  # Close the loop
     
     for edge in clip_edges:
         input_list = output_list
