@@ -335,6 +335,7 @@ class DrawingApp:
             # Define drawing area and background
             self.background_img = copy.deepcopy(self.background_img_unchanged)
             background_resized = cv2.resize(self.background_img, (self.w, self.h))
+            self.color_flags["red"] = False
             
             # Initialize canvas and save initial state
             if self.canvas is None:
@@ -662,6 +663,7 @@ class DrawingApp:
 
     def handle_fill(self, x, y, hand):
         fill_rect = self.buttons["fill"]
+        color_already_selected = False
 
         if self.point_in_rect(x,y, fill_rect):
             if self.is_index_up(hand):
@@ -669,6 +671,18 @@ class DrawingApp:
                 self.eraser_button_clicked = False
                 self.brush_button_clicked = False
                 print("Fill Button Clicked")
+        
+        for color, flag in self.color_flags.items():
+            if flag:
+                color_already_selected = True
+        
+        if  not color_already_selected: 
+            self.color_flags["red"] = True
+                
+            
+            
+
+
 
 
     def handle_brush(self, x, y, hand):
