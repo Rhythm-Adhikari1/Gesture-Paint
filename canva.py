@@ -524,66 +524,9 @@ class DrawingApp:
             cv2.circle(img=img, center=(line[0][0], int(tool_position)), radius=5, color=(255, 0, 255))
 
 
-    def draw_circle_midpoint(self, combined, cx, cy, r, color, thickness=1, is_highlighted=False):
-        """Draw circle using midpoint circle algorithm."""
-        def plot_circle_points(x, y, cx, cy):
-            # Plot points in all octants
-            points = [
-                (cx + x, cy + y), (cx - x, cy + y),
-                (cx + x, cy - y), (cx - x, cy - y),
-                (cx + y, cy + x), (cx - y, cy + x),
-                (cx + y, cy - x), (cx - y, cy - x)
-            ]
-            return points
 
-    # If highlighted, draw shadow first
-        if is_highlighted:
-            r_shadow = r + 2
-            # Draw shadow using midpoint algorithm
-            x, y = 0, r_shadow
-            p = 1 - r_shadow
-            prev_points = None
-            
-            while x <= y:
-                points = plot_circle_points(x, y, cx, cy)
-                if prev_points:
-                    for i in range(len(points)):
-                        cv2.line(combined, 
-                                (int(prev_points[i][0]), int(prev_points[i][1])), 
-                                (int(points[i][0]), int(points[i][1])), 
-                                (180, 180, 180), 2)
-                prev_points = points
-                
-                if p <= 0:
-                    x += 1
-                    p = p + 2 * x + 1
-                else:
-                    x += 1
-                    y -= 1
-                    p = p + 2 * (x - y) + 1
-
-        # Draw main circle
-        x, y = 0, r
-        p = 1 - r
-        prev_points = None
-        
-        while x <= y:
-            points = plot_circle_points(x, y, cx, cy)
-            if prev_points:
-                for i in range(len(points)):
-                    cv2.line(combined, 
-                            (int(prev_points[i][0]), int(prev_points[i][1])), 
-                            (int(points[i][0]), int(points[i][1])), 
-                            color, thickness)
-            prev_points = points
-            
-            if p <= 0:
-                x += 1
-                p = p + 2 * x + 1
-            else:
-                x += 1
-                y -= 1
-                p = p + 2 * (x - y) + 1
+    
+    
 
 # Modify render_canvas method to use the new circle drawing function:
     def render_canvas(self, background, drawing_canvas):
@@ -598,7 +541,7 @@ class DrawingApp:
                 if isinstance(shape, tuple):
                     # Draw circle using midpoint algorithm
                     cx, cy, r = shape
-                    self.draw_circle_midpoint(
+                    self.draw_shapes.draw_circle(
                         combined, 
                         int(cx), int(cy), int(r), 
                         base_color,

@@ -1,6 +1,4 @@
-import  numpy as np
 import cv2
-
 
 class Draw:
 
@@ -48,7 +46,68 @@ class Draw:
             else:
                 self.line(img, points[i], points[0], color=color)
     
+    
+    
+    def draw_circle(self, combined, cx, cy, r, color, thickness=1, is_highlighted=False):
+        """Draw circle using midpoint circle algorithm."""
+        def plot_circle_points(x, y, cx, cy):
+            # Plot points in all octants
+            points = [
+                (cx + x, cy + y), (cx - x, cy + y),
+                (cx + x, cy - y), (cx - x, cy - y),
+                (cx + y, cy + x), (cx - y, cy + x),
+                (cx + y, cy - x), (cx - y, cy - x)
+            ]
+            return points
 
+    # If highlighted, draw shadow first
+        if is_highlighted:
+            r_shadow = r + 2
+            # Draw shadow using midpoint algorithm
+            x, y = 0, r_shadow
+            p = 1 - r_shadow
+            prev_points = None
+            
+            while x <= y:
+                points = plot_circle_points(x, y, cx, cy)
+                if prev_points:
+                    for i in range(len(points)):
+                        cv2.line(combined, 
+                                (int(prev_points[i][0]), int(prev_points[i][1])), 
+                                (int(points[i][0]), int(points[i][1])), 
+                                (180, 180, 180), 2)
+                prev_points = points
+                
+                if p <= 0:
+                    x += 1
+                    p = p + 2 * x + 1
+                else:
+                    x += 1
+                    y -= 1
+                    p = p + 2 * (x - y) + 1
+
+        # Draw main circle
+        x, y = 0, r
+        p = 1 - r
+        prev_points = None
+        
+        while x <= y:
+            points = plot_circle_points(x, y, cx, cy)
+            if prev_points:
+                for i in range(len(points)):
+                    cv2.line(combined, 
+                            (int(prev_points[i][0]), int(prev_points[i][1])), 
+                            (int(points[i][0]), int(points[i][1])), 
+                            color, thickness)
+            prev_points = points
+            
+            if p <= 0:
+                x += 1
+                p = p + 2 * x + 1
+            else:
+                x += 1
+                y -= 1
+                p = p + 2 * (x - y) + 1
 
 def main():
     pass
