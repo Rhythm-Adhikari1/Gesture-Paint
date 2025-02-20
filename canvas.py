@@ -373,7 +373,7 @@ class DrawingApp:
                     x, y = lm_list[8][:2]
                     
                     # Check Coordinates
-                    print(x,y)
+                    # print(x,y)
       
          
 
