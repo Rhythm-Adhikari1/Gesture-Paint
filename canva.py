@@ -21,7 +21,7 @@ class DrawingApp:
         self.selected_vertex_shape = None  # Track which shape the selected vertex belongs to
         
         self.shape_colors = {}  # Dictionary to store shape colors
-        self.currently_filling = False # Flag to track if filling is in progress    
+        self.currently_filling = False # Flag to track if filling is in progress
         
         self.edge_selection_radius = 10
         self.selected_edge = None  # Will store (shape_index, start_idx, end_idx)
@@ -589,7 +589,7 @@ class DrawingApp:
     def handle_dragging(self, hand):
         """Handle shape dragging."""
         # Skip if rotation or edge extension is active
-        if self.rotation or self.selected_edge is not None:
+        if self.rotation or self.selected_edge is not None or self.brush_button_clicked or self.eraser_button_clicked or self.edge_drag_start is not None or self.vertex_dragging_running:  
             return
         
         lm_list = hand["lmList"]
@@ -811,7 +811,7 @@ class DrawingApp:
     def handle_edge_extension(self, hand):
         """Handle edge extension while preventing overlap with dragging."""
         # Skip if rotation, scaling or dragging is active
-        if self.rotation or self.scaling or self.selected_shape_index is not None:
+        if self.rotation or self.scaling or self.selected_shape_index is not None or self.vertex_dragging_running or self.brush_button_clicked or self.eraser_button_clicked: 
             return
 
         lm_list = hand["lmList"]
