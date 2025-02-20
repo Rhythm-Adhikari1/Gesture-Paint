@@ -472,7 +472,7 @@ class DrawingApp:
         for idx, shape in enumerate(self.dropped_shapes):
             if shape:
                 is_highlighted = (idx == self.hover_shape_index)
-                outline_color = (0, 0, 255)  # Default outline color
+                outline_color = (0, 0, 0)  # Default outline color
                 
                 # Get the fill color for this shape if it was set.
                 fill_color = self.shape_colors.get(idx, None)
