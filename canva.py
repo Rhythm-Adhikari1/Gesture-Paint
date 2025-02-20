@@ -419,7 +419,7 @@ class DrawingApp:
             self.h, self.w, _ = frame.shape
 
             # Define drawing area and background
-            drawing_canvas = [(30, 150), (1030, 150), (1030, self.h - 50), (30, self.h - 50)]
+            drawing_canvas = [(30, 115), (1040, 115), (1040, 690), (30, 690)]
             self.background_img = copy.deepcopy(self.background_img_unchanged)
             background_resized = cv2.resize(self.background_img, (self.w, self.h))
             
@@ -458,6 +458,7 @@ class DrawingApp:
                     # **NEW: Process undo/redo first.
                     lm_list = drawing_hand["lmList"]
                     x, y = lm_list[8][:2]
+                    print(x, y)
          
 
                     self.undo(drawing_hand)
@@ -491,7 +492,7 @@ class DrawingApp:
         return x1 < x < x2 and y1 < y < y2
 
     def check_hand_inside_canvas(self, x, y):
-        return 30 < x < 1030 and 150 < y < (self.h - 50)
+        return 30 < x < 1040 and 115 < y < 690
 
     def is_index_up(self, hand):
         """Return True if only the index finger is up."""
@@ -527,11 +528,6 @@ class DrawingApp:
             tool_position = np.interp(self.brush_thickness, [1, 100], [line[1][1], line[0][1]])
             self.draw_shapes.draw_circle(img, center=(line[0][0], int(tool_position)), radius=5, 
                              outline_color=(0,0,0),thickness= 1,fill_color= (255, 0, 255) )
-
-
-
-    
-    
 
     # Modify render_canvas method to use the new circle drawing function:
     def render_canvas(self, background, drawing_canvas):
